@@ -356,7 +356,7 @@ export async function duplicateMovimento(id: string): Promise<ActionResult> {
   const importHash = computeTransactionHash({
     date: txDate,
     amount: Math.abs(src.amount),
-    type: src.type,
+    type: src.type as "income" | "expense",
     description: src.description,
   });
 
@@ -366,7 +366,7 @@ export async function duplicateMovimento(id: string): Promise<ActionResult> {
       date: txDate,
       description: src.description,
       amount: Math.abs(src.amount),
-      type: src.type,
+      type: src.type as "income" | "expense",
       categoryId: src.categoryId,
       bankAccountId: src.bankAccountId,
       paymentMethodId: src.paymentMethodId || null,
