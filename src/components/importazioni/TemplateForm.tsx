@@ -199,7 +199,7 @@ export function TemplateForm({
               <select
                 className="input w-full"
                 value={dateFormat}
-                onChange={(e) => setDateFormat(e.target.value)}
+                onChange={(e) => setDateFormat(e.target.value as any)}
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                 <option value="DD-MM-YYYY">DD-MM-YYYY</option>
@@ -224,7 +224,7 @@ export function TemplateForm({
               <select
                 className="input w-full"
                 value={dateFormat}
-                onChange={(e) => setDateFormat(e.target.value)}
+                onChange={(e) => setDateFormat(e.target.value as any)}
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                 <option value="DD-MM-YYYY">DD-MM-YYYY</option>
