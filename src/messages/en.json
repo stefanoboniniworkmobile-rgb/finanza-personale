@@ -1,0 +1,95 @@
+{
+  "app": { "name": "Personal Finance" },
+  "nav": {
+    "dashboard": "Dashboard",
+    "movimenti": "Transactions",
+    "budget": "Budget",
+    "forecast": "Forecast",
+    "conti": "Accounts & Cards",
+    "categorie": "Categories",
+    "modalita": "Payment methods",
+    "impostazioni": "Settings",
+    "general": "General",
+    "anagrafiche": "Records",
+    "system": "System"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "add": "Add",
+    "loading": "Loading…",
+    "search": "Search",
+    "filters": "Filters",
+    "reset": "Reset",
+    "import": "Import",
+    "export": "Export",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "auth": {
+    "signin": "Sign in",
+    "signinTitle": "Sign in to Personal Finance",
+    "signinSubtitle": "We'll send a magic link to your email",
+    "emailPlaceholder": "you@example.com",
+    "magicLinkSent": "Check your inbox",
+    "magicLinkInstructions": "We sent you a sign-in link. Open the email and click to enter.",
+    "signout": "Sign out"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "patrimonio": "Net worth",
+    "entrate": "Income",
+    "uscite": "Expenses",
+    "netto": "Net",
+    "movimenti": "Transactions",
+    "esposizioneCarte": "Card balance",
+    "andamento": "Income vs expenses",
+    "composizioneUscite": "Spending breakdown",
+    "saldiPerConto": "Account balances",
+    "movimentiRecenti": "Recent transactions"
+  },
+  "budget": {
+    "title": "Budget",
+    "subtitle": "Click amount to edit · click pill to change calculation mode",
+    "defaultMode": "Default mode",
+    "applyAll": "Apply to all",
+    "configureCategories": "Configure categories",
+    "modes": {
+      "AVG_3M": "3-month average",
+      "AVG_6M": "6-month average",
+      "AVG_12M": "12-month average",
+      "PREV_MONTH": "Previous month",
+      "SAME_MONTH_LY": "Same month last year",
+      "MAX_3M": "Max of last 3 months",
+      "ACTUAL_MONTH": "Actual of the month",
+      "MANUAL": "Manual"
+    },
+    "modesShort": {
+      "AVG_3M": "Avg 3M",
+      "AVG_6M": "Avg 6M",
+      "AVG_12M": "Avg 12M",
+      "PREV_MONTH": "Prev month",
+      "SAME_MONTH_LY": "Same m. LY",
+      "MAX_3M": "Max 3M",
+      "ACTUAL_MONTH": "Actual",
+      "MANUAL": "Manual"
+    },
+    "noHistory": "Not enough history",
+    "manual": "Manual"
+  },
+  "transaction": {
+    "new": "New transaction",
+    "date": "Date",
+    "amount": "Amount",
+    "description": "Description",
+    "category": "Category",
+    "type": "Type",
+    "account": "Account",
+    "method": "Method",
+    "notes": "Notes",
+    "income": "Income",
+    "expense": "Expense"
+  }
+}

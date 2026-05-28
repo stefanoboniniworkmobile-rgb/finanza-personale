@@ -1,0 +1,95 @@
+{
+  "app": { "name": "Finanza Personale" },
+  "nav": {
+    "dashboard": "Dashboard",
+    "movimenti": "Movimenti",
+    "budget": "Budget",
+    "forecast": "Forecast",
+    "conti": "Conti & Carte",
+    "categorie": "Categorie",
+    "modalita": "Modalità pagamento",
+    "impostazioni": "Impostazioni",
+    "general": "Generale",
+    "anagrafiche": "Anagrafiche",
+    "system": "Sistema"
+  },
+  "common": {
+    "save": "Salva",
+    "cancel": "Annulla",
+    "edit": "Modifica",
+    "delete": "Elimina",
+    "add": "Aggiungi",
+    "loading": "Caricamento…",
+    "search": "Cerca",
+    "filters": "Filtri",
+    "reset": "Reset",
+    "import": "Importa",
+    "export": "Esporta",
+    "yes": "Sì",
+    "no": "No"
+  },
+  "auth": {
+    "signin": "Accedi",
+    "signinTitle": "Accedi a Finanza Personale",
+    "signinSubtitle": "Riceverai un link via email per entrare",
+    "emailPlaceholder": "tu@esempio.it",
+    "magicLinkSent": "Controlla la tua casella di posta",
+    "magicLinkInstructions": "Ti abbiamo inviato un link di accesso. Apri l'email e clicca per entrare.",
+    "signout": "Esci"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "patrimonio": "Patrimonio totale",
+    "entrate": "Entrate",
+    "uscite": "Uscite",
+    "netto": "Netto",
+    "movimenti": "Movimenti",
+    "esposizioneCarte": "Esposizione carte",
+    "andamento": "Andamento entrate/uscite",
+    "composizioneUscite": "Composizione uscite",
+    "saldiPerConto": "Saldi per conto",
+    "movimentiRecenti": "Movimenti recenti"
+  },
+  "budget": {
+    "title": "Budget",
+    "subtitle": "Click sull'importo per modificare · click sulla pillola per cambiare modalità",
+    "defaultMode": "Modalità di default",
+    "applyAll": "Applica a tutte",
+    "configureCategories": "Configura categorie",
+    "modes": {
+      "AVG_3M": "Media 3 mesi",
+      "AVG_6M": "Media 6 mesi",
+      "AVG_12M": "Media 12 mesi",
+      "PREV_MONTH": "Mese precedente",
+      "SAME_MONTH_LY": "Stesso mese anno precedente",
+      "MAX_3M": "Max ultimi 3 mesi",
+      "ACTUAL_MONTH": "Consuntivo del mese",
+      "MANUAL": "Manuale"
+    },
+    "modesShort": {
+      "AVG_3M": "Media 3M",
+      "AVG_6M": "Media 6M",
+      "AVG_12M": "Media 12M",
+      "PREV_MONTH": "Mese prec.",
+      "SAME_MONTH_LY": "Stesso mese a.p.",
+      "MAX_3M": "Max 3M",
+      "ACTUAL_MONTH": "Consuntivo",
+      "MANUAL": "Manuale"
+    },
+    "noHistory": "Storico insufficiente",
+    "manual": "Manuale"
+  },
+  "transaction": {
+    "new": "Nuovo movimento",
+    "date": "Data",
+    "amount": "Importo",
+    "description": "Descrizione",
+    "category": "Categoria",
+    "type": "Tipo",
+    "account": "Conto",
+    "method": "Modalità",
+    "notes": "Note",
+    "income": "Entrata",
+    "expense": "Uscita"
+  }
+}

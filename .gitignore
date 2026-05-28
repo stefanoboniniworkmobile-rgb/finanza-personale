@@ -1,0 +1,11 @@
+node_modules
+.next
+.env
+.env.local
+.DS_Store
+*.log
+prisma/db.sqlite
+prisma/db.sqlite-journal
+.vercel
+
+certificates

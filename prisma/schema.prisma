@@ -1,0 +1,727 @@
+// Schema database Finanza Personale
+// In sviluppo: SQLite (basta avere un file).
+// In produzione: cambia provider a "postgresql" e aggiorna DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============== AUTH (compatibile con Auth.js) ==============
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  locale        String    @default("it")
+  // Modalità di calcolo budget di default per nuove categorie
+  defaultBudgetMode String  @default("AVG_3M")
+  // Intestatario ("Holder") attivo nell'UI. Scalar, niente FK Prisma per evitare cicli.
+  activeHolderId String?
+  createdAt     DateTime  @default(now())
+
+  accounts             AuthAccount[]
+  sessions             Session[]
+  holders              Holder[]
+  emailChangeRequests  EmailChangeRequest[]
+  // Nota: nessuna relazione diretta verso i modelli del dominio (BankAccount, Category, ecc.).
+  // Tutto il dominio è scoped per Holder. Per arrivare ai dati: user.holders[].transactions, ecc.
+}
+
+// Richiesta di cambio email avviata dall'utente da /impostazioni/account.
+// Flow:
+//   1. utente loggato richiede il cambio inserendo newEmail
+//   2. backend crea EmailChangeRequest con token random e scadenza (1 ora)
+//   3. backend manda email alla newEmail con link che contiene il token
+//   4. utente apre la mail e clicca → backend valida token, fa UPDATE User.email
+//      e cancella tutte le Session → utente costretto a riloggare con la nuova mail
+model EmailChangeRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  newEmail  String
+  token     String   @unique
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+// ============== INTESTATARIO (HOLDER) ==============
+// Scope di tutti i dati del dominio. Un User può averne più di uno (es. Stefano, Lorenzo).
+// Niente è condiviso tra Holder diversi: conti, categorie, transazioni, budget, template — tutto è scoped.
+model Holder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccounts    BankAccount[]
+  categories      Category[]
+  paymentMethods  PaymentMethod[]
+  transactions    Transaction[]
+  budgetOverrides MonthlyBudgetOverride[]
+  forecasts       Forecast[]
+  importTemplates ImportTemplate[]
+  importMappings  ImportMapping[]
+  importBatches   ImportBatch[]
+  bankConnections BankConnection[]
+  assets          Asset[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// Account OAuth (per Google/altri provider in futuro)
+model AuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+// ============== DOMINIO ==============
+
+// Conto bancario / carta / cassa
+model BankAccount {
+  id             String        @id @default(cuid())
+  holderId       String
+  name           String
+  initialBalance Float         @default(0)
+  type           String        @default("liquidity") // liquidity | credit_card | savings | cash
+  notes          String?
+
+  // Identificativi del conto. Opzionali (i contanti non hanno né IBAN né PAN).
+  // Servono per il matching automatico con gli account ritornati da Enable Banking
+  // in fase di aggancio PSD2 (un consenso può ritornare più conti — c/c + carta EGO,
+  // ecc. — e l'app deve sapere a quale BankAccount dell'anagrafica associare ognuno).
+  // IBAN: normalizzato uppercase senza spazi. Esempio: "IT53A0303266130010000090272".
+  iban           String?
+  // PAN mascherato così come arriva dal provider (es. "5189********6765").
+  // Per il matching contiamo sugli ultimi 4. Per la visualizzazione UI è più
+  // riconoscibile della sola coda perché è quello che l'utente vede sull'estratto.
+  cardMaskedPan  String?
+
+  createdAt      DateTime      @default(now())
+  holder         Holder        @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  importMappings ImportMapping[]
+  defaultForTemplates ImportTemplate[] @relation("TplDefaultAccount")
+  bankConnections BankConnection[]
+  @@unique([holderId, name])
+  @@index([holderId, iban])
+}
+
+// Categoria di spesa o entrata
+model Category {
+  id              String        @id @default(cuid())
+  holderId        String
+  name            String
+  type            String        // "income" | "expense"
+  showInDashboard Boolean       @default(true) // flag "Dashboard S/N"
+
+  // Budget tracking
+  hasBudget       Boolean       @default(true)   // se false, non compare nel pannello Budget
+  budgetMode      String        @default("AVG_3M") // AVG_3M | AVG_6M | AVG_12M | PREV_MONTH | SAME_MONTH_LY | MAX_3M | MANUAL
+  manualBudget    Float?        // usato quando budgetMode = MANUAL
+
+  // ─────────────────────────────────────────────────────────────────
+  // Causali di TRASFERIMENTO tra conti.
+  //
+  // Quando una category ha isTransfer=true, il movimento associato è
+  // considerato un giroconto: al momento dell'inserimento l'utente sceglie
+  // il "conto di contropartita" e il sistema crea automaticamente il
+  // movimento speculare sull'altro conto (segno opposto), legandoli
+  // tramite Transaction.transferGroupId.
+  //
+  // counterpartCategoryId è un autoriferimento opzionale: indica quale
+  // category deve essere usata sull'altro lato del giroconto.
+  // Esempio tipico: "Trasferimento-" (expense) ha come counterpart
+  // "Trasferimento+" (income), e viceversa. Se non valorizzato, il
+  // sistema userà la STESSA category sull'altro lato (caso degenere ma
+  // ammesso — l'utente è libero di organizzarsi come preferisce).
+  //
+  // L'aggiornamento di counterpartCategoryId non è transazionale lato
+  // DB ma sì lato action: quando l'utente imposta A.counterpart = B, la
+  // action può opzionalmente impostare anche B.counterpart = A per
+  // simmetria. Non è enforced a schema per restare flessibili.
+  // ─────────────────────────────────────────────────────────────────
+  isTransfer            Boolean   @default(false)
+  counterpartCategoryId String?
+  counterpartCategory   Category? @relation("CategoryCounterpart", fields: [counterpartCategoryId], references: [id], onDelete: SetNull)
+  // Lato inverso della relazione self (chi punta a questa come contropartita).
+  counterpartOf         Category[] @relation("CategoryCounterpart")
+
+  holder          Holder        @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  monthlyOverrides MonthlyBudgetOverride[]
+  forecastBudgets ForecastBudget[]
+  importMappings  ImportMapping[]
+  defaultForTemplatesExpense ImportTemplate[] @relation("TplDefaultCategory")
+  defaultForTemplatesIncome  ImportTemplate[] @relation("TplDefaultCategoryIncome")
+  @@unique([holderId, name])
+  @@index([holderId, isTransfer])
+}
+
+// Override del budget mensile per (categoria, anno, mese).
+// Se presente, vince sul calcolo automatico (e anche sul manualBudget) per quel mese.
+model MonthlyBudgetOverride {
+  id         String   @id @default(cuid())
+  holderId   String
+  categoryId String
+  year       Int
+  month      Int      // 1-12
+  amount     Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  holder   Holder   @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([holderId, categoryId, year, month])
+  @@index([holderId, year])
+}
+
+// Scenario forecast: combinazione di mesi consuntivo + mesi budget per un anno.
+// Indipendente dagli MonthlyBudgetOverride globali.
+model Forecast {
+  id           String   @id @default(cuid())
+  holderId     String
+  name         String
+  year         Int
+  // Mesi 1-12 considerati "consuntivo": stringa CSV es. "1,2,3,4,5"
+  // I mesi NON in questa lista sono "budget" (editabili nello scenario).
+  actualMonths String
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  holder    Holder           @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  budgets   ForecastBudget[]
+
+  @@unique([holderId, name, year])
+  @@index([holderId, year])
+}
+
+// Override del budget per i mesi "budget" all'interno di un forecast.
+// Per i mesi non presenti in questa tabella si usa il calcolo automatico
+// (modalità della categoria) come default.
+model ForecastBudget {
+  id         String @id @default(cuid())
+  forecastId String
+  categoryId String
+  month      Int    // 1-12
+  amount     Float
+
+  forecast Forecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([forecastId, categoryId, month])
+  @@index([forecastId])
+}
+
+// Modalità di pagamento
+model PaymentMethod {
+  id            String        @id @default(cuid())
+  holderId      String
+  name          String
+  notes         String?
+  holder        Holder        @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  importMappings ImportMapping[]
+  defaultForTemplates ImportTemplate[] @relation("TplDefaultPaymentMethod")
+  @@unique([holderId, name])
+}
+
+// Movimento (entrata/uscita)
+model Transaction {
+  id              String        @id @default(cuid())
+  holderId        String
+  date            DateTime
+  description     String
+  amount          Float         // sempre positivo; il segno deriva da `type`
+  type            String        // "income" | "expense"
+  notes           String?
+
+  bankAccountId   String
+  categoryId      String
+  paymentMethodId String?
+
+  // Per i giroconti: ID del movimento "speculare" sull'altro conto
+  transferGroupId String?
+
+  // Tracking import
+  importHash      String?       // SHA-1 di data|amountSigned|descNormalizzata — controllo duplicati (scope: Holder)
+  importBatchId   String?
+
+  // Tracking PSD2 (sync da banca via Enable Banking).
+  // Orthogonale a importBatchId: una transazione viene da import file (importBatchId)
+  // oppure da sync PSD2 (bankConnectionId), mai entrambi.
+  bankConnectionId    String?
+  providerEntryRef    String?   // entry_reference del provider, univoco per (ASPSP, account)
+
+  // Riconciliazione con estratto bancario
+  reconciled          Boolean   @default(false)
+  reconciledAt        DateTime?
+  reconciliationNote  String?   // testo libero, usato per raggruppare riconciliazioni (es. "e/c aprile", "Import: NOMEFILE")
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  holder         Holder         @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  bankAccount    BankAccount    @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  category       Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  importBatch    ImportBatch?   @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  bankConnection BankConnection? @relation(fields: [bankConnectionId], references: [id], onDelete: SetNull)
+
+  @@index([transferGroupId])
+  @@index([holderId, date])
+  @@index([holderId, bankAccountId])
+  @@index([holderId, categoryId])
+  @@index([holderId, importHash])
+  @@index([holderId, reconciled])
+  @@index([importBatchId])
+  @@index([bankConnectionId])
+  @@index([bankConnectionId, providerEntryRef])
+}
+
+// ============== IMPORT ==============
+
+// Template di importazione: definisce come leggere un file di una specifica fonte.
+model ImportTemplate {
+  id           String   @id @default(cuid())
+  holderId     String
+  name         String                            // es. "Revolut CSV", "Intesa estratto"
+  sourceLabel  String?                           // descrizione libera della fonte
+  fileType     String   @default("csv")          // "csv" | "xlsx"
+
+  // Parametri di parsing
+  sheetName    String?                           // xlsx: nome foglio (vuoto = primo foglio)
+  headerRow    Int      @default(1)              // riga (1-based) con le intestazioni
+  delimiter    String   @default(",")            // csv: , ; \t
+  encoding     String   @default("utf-8")        // csv
+  decimalSep   String   @default(",")            // separatore decimale del file: "," o "."
+  thousandsSep String   @default(".")            // separatore migliaia: "." o "," o ""
+  dateFormat   String   @default("DD/MM/YYYY")   // DD/MM/YYYY | YYYY-MM-DD | MM/DD/YYYY | AUTO
+
+  // Strategia segno: SIGNED | DEBIT_CREDIT | AMOUNT_PLUS_TYPE
+  signMode     String   @default("SIGNED")
+
+  // Mappatura colonne (nomi di intestazione, case-insensitive)
+  colDate         String
+  colDescription  String
+  colAmount       String?              // usato in SIGNED e AMOUNT_PLUS_TYPE
+  colDebit        String?              // usato in DEBIT_CREDIT (uscite)
+  colCredit       String?              // usato in DEBIT_CREDIT (entrate)
+  colType         String?              // usato in AMOUNT_PLUS_TYPE
+  typeIncomeValue String?              // valore della col tipo che identifica entrate (es. "A", "IN", "Avere")
+  typeExpenseValue String?             // valore della col tipo che identifica uscite (es. "D", "OUT", "Dare")
+
+  // Lookup: colonne di provenienza per entità (opzionali)
+  colAccount        String?
+  colCategory       String?
+  colPaymentMethod  String?
+  colNotes          String?
+
+  // Default applicati quando il template NON mappa la colonna oppure il lookup non trova match.
+  defaultBankAccountId    String?
+  defaultCategoryExpenseId String?     // default categoria per le uscite
+  defaultCategoryIncomeId  String?     // default categoria per le entrate
+  defaultPaymentMethodId  String?
+
+  // Se true, in AMOUNT_PLUS_TYPE / DEBIT_CREDIT l'importo nel file potrebbe avere segno: lo prendiamo in valore assoluto.
+  forceAbs        Boolean  @default(true)
+
+  // Se true, il segno finale viene INVERTITO dopo l'applicazione di signMode.
+  // Utile quando il file ha la convenzione "uscite = positive, entrate = negative"
+  // (tipico di alcuni report dove tutto è visto dal punto di vista della banca).
+  invertSigns     Boolean  @default(false)
+
+  // Se valorizzato, qualunque riga che contiene questo testo (case-insensitive) in una sua cella
+  // viene saltata. Tipico: "Totale" per scartare la riga di totale in fondo all'estratto.
+  skipRowsContaining String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  holder          Holder            @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  defaultBankAccount     BankAccount?   @relation("TplDefaultAccount", fields: [defaultBankAccountId], references: [id], onDelete: SetNull)
+  defaultCategoryExpense Category?      @relation("TplDefaultCategory", fields: [defaultCategoryExpenseId], references: [id], onDelete: SetNull)
+  defaultCategoryIncome  Category?      @relation("TplDefaultCategoryIncome", fields: [defaultCategoryIncomeId], references: [id], onDelete: SetNull)
+  defaultPaymentMethod   PaymentMethod? @relation("TplDefaultPaymentMethod", fields: [defaultPaymentMethodId], references: [id], onDelete: SetNull)
+  mappings        ImportMapping[]
+  batches         ImportBatch[]
+
+  @@unique([holderId, name])
+  @@index([holderId])
+}
+
+// Lookup/regole per ogni template: pattern testuale → entità app.
+// kind = "ACCOUNT" | "CATEGORY" | "PAYMENT_METHOD"
+// matchType = "EXACT" | "CONTAINS" | "STARTS_WITH" | "REGEX"
+//   - EXACT: confronto esatto con la colonna sorgente del kind (categoria/conto/modalità del file)
+//   - CONTAINS/STARTS_WITH/REGEX: il pattern viene confrontato con la DESCRIZIONE del movimento
+//     (usato principalmente per kind=CATEGORY su estratti bancari dove la descrizione è il dato ricco)
+model ImportMapping {
+  id          String   @id @default(cuid())
+  holderId    String
+  templateId  String
+  kind        String
+  matchType   String   @default("EXACT")
+  sourceValueNorm String                // pattern normalizzato (lowercase trim)
+  sourceValueRaw  String                // pattern originale (per UI)
+
+  bankAccountId    String?
+  categoryId       String?
+  paymentMethodId  String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  holder        Holder         @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  template      ImportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  category      Category?      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@unique([holderId, templateId, kind, matchType, sourceValueNorm])
+  @@index([holderId, templateId, kind])
+}
+
+// Storico delle esecuzioni di import.
+model ImportBatch {
+  id           String   @id @default(cuid())
+  holderId     String
+  templateId   String?
+  fileName     String
+  totalRows    Int      @default(0)
+  importedCount Int     @default(0)
+  duplicateCount Int    @default(0)
+  errorCount   Int      @default(0)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  holder       Holder           @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  template     ImportTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([holderId, createdAt])
+}
+
+// ============== PSD2 / OPEN BANKING ==============
+
+// Connessione PSD2 verso un conto bancario via AISP (per ora solo Enable Banking).
+//
+// Una sessione di consenso presso il provider può coprire più conti dello stesso
+// ASPSP (es. consenso Credem che sblocca c/c + conto risparmio): in quel caso si
+// creano più BankConnection con lo stesso sessionId, ciascuna linkata al
+// BankAccount corrispondente.
+//
+// Una BankConnection è "viva" finché validUntil non è scaduto e status è "active".
+// Quando scade, status diventa "expired" e l'utente deve rifare il flow di
+// consenso (è un vincolo normativo PSD2: max 180 giorni di validità).
+model BankConnection {
+  id                  String   @id @default(cuid())
+  holderId            String
+  bankAccountId       String
+
+  // Provider AISP. Per ora solo "enable_banking", in futuro potrebbero arrivarne altri.
+  provider            String   @default("enable_banking")
+
+  // Identificazione ASPSP lato provider. Enable Banking usa (name, country)
+  // come chiave logica — niente ID statici.
+  aspspName           String   // es. "Credem", "Banca Mediolanum", "ING", "BBVA"
+  aspspCountry        String   @default("IT")
+
+  // ID della sessione (consenso) presso il provider.
+  // Una sessione può coprire più account → più BankConnection con stesso sessionId.
+  sessionId           String
+  providerAccountId   String   // account_id ritornato dal provider per QUESTO conto
+
+  // Scadenza del consenso (max 180 giorni dalla creazione per PSD2).
+  validUntil          DateTime
+
+  // Tracking sync
+  lastSyncAt          DateTime?
+  // Data della transazione più recente vista all'ultimo sync.
+  // Usata per incremental fetch nei sync successivi.
+  lastSyncedTxDate    DateTime?
+
+  // Stato corrente.
+  // "active": utilizzabile
+  // "expiring": < 14 giorni alla scadenza (UI dovrebbe avvisare l'utente)
+  // "expired": consenso scaduto, serve rifare il flow
+  // "error": ultimo sync fallito (vedi errorMessage)
+  // "revoked": utente ha revocato dal portale della banca
+  status              String   @default("active")
+  errorMessage        String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  holder        Holder        @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  syncJobs      SyncJob[]
+
+  @@unique([provider, providerAccountId])
+  @@index([holderId, status])
+  @@index([validUntil])
+  @@index([bankAccountId])
+}
+
+// Job di sincronizzazione delle transazioni di una BankConnection.
+//
+// Razionale: quando l'utente collega una nuova banca (o lancia un sync manuale),
+// il primo download dello storico può richiedere 30-60s con strategy="longest".
+// Su Vercel le serverless functions hanno timeout duro (10s free, 60s pro),
+// quindi NON possiamo aspettare il sync dentro la request HTTP che ha
+// triggerato il collegamento. Soluzione:
+//
+//  1) L'endpoint /api/psd2/match crea un SyncJob status="pending" per ogni
+//     BankConnection appena creata, fa la response al client (redirect rapido).
+//  2) Subito dopo, usando `after()` di Next 15, lancia `runSyncJob(jobId)` in
+//     background — l'utente è già stato redirezionato, la function continua
+//     a girare nel tempo residuo del budget serverless.
+//  3) La UI in /impostazioni/banche fa polling su /api/psd2/sync-status?jobs=...
+//     ogni 3-5s mostrando un badge di avanzamento.
+//  4) Vercel Cron (in prod) gira ogni minuto: trova SyncJob "running" fermi da
+//     >2 minuti (orfani da function timeout) o "pending" non ancora partiti
+//     e li rilancia. Idempotente: il sync usa providerEntryRef per dedup.
+//
+// Stati:
+//  - pending: appena creato, runSyncJob() non ancora chiamato
+//  - running: runSyncJob() ha iniziato; startedAt valorizzato
+//  - done: completato con successo; finishedAt valorizzato
+//  - error: fallito; errorMessage popolato. Cron NON riprova automaticamente
+//          gli error (servirebbe intervento utente per capire cosa è successo).
+model SyncJob {
+  id                String   @id @default(cuid())
+  bankConnectionId  String
+
+  status            String   @default("pending") // pending | running | done | error
+
+  startedAt         DateTime?
+  finishedAt        DateTime?
+
+  // Conteggi popolati a fine sync. Servono alla UI per mostrare "Importate X
+  // transazioni" e all'utente per capire l'esito del primo aggancio.
+  importedCount     Int      @default(0)
+  updatedCount      Int      @default(0)
+  healedCount       Int      @default(0)
+
+  errorMessage      String?
+
+  // Per i retry da cron: se attemptCount>1 forziamo strategy=longest nel sync
+  // così non perdiamo storico nel caso il primo tentativo si fosse interrotto
+  // dopo aver scritto solo alcune tx (e quindi avesse aggiornato lastSyncedTxDate
+  // a una data parziale).
+  attemptCount      Int      @default(0)
+
+  // Schedulazione retry: se valorizzato in futuro, il cron non lo lancia prima.
+  // Default null = "lanciabile subito". Usato per backoff esponenziale on error.
+  nextRunAt         DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  bankConnection    BankConnection @relation(fields: [bankConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRunAt])
+  @@index([bankConnectionId, status])
+}
+
+// Payload temporaneo della session Enable Banking, persistito subito dopo
+// authorizeSession nel callback PSD2. La pagina di abbinamento e l'endpoint
+// /api/psd2/match leggono da qui invece di ri-chiamare GET /sessions/{id}
+// su EB — perché la GET ritorna solo i metadati della sessione (status,
+// valid_until, aspsp) e NON gli account dettagliati con uid, che invece
+// arrivano una sola volta come response del POST /sessions (authorize).
+//
+// Lifecycle:
+//  1) Callback PSD2 (authorize success) → INSERT con TTL 1 ora
+//  2) Pagina /impostazioni/banche/abbinamento → SELECT by id (proprietà utente)
+//  3) Endpoint POST /api/psd2/match → SELECT + DELETE alla fine dell'uso
+//  4) Job di cleanup periodico (opzionale) → DELETE WHERE expiresAt < now
+//
+// Sicurezza: l'id è cuid casuale, non sequenziale. Il SELECT verifica sempre
+// userId/holderId match con la sessione utente corrente.
+model PendingPsd2Session {
+  id            String   @id @default(cuid())
+  // session_id assegnato da Enable Banking. @unique per dedup nel caso il
+  // callback venga rieseguito (es. l'utente refresha la pagina di redirect).
+  sessionId     String   @unique
+  userId        String
+  holderId      String
+  // JSON-serialized payload completo della Session EB (session_id, accounts,
+  // aspsp, psu_type, access, ...). Lo deserializziamo a leggere.
+  payload       String
+  // Il BankAccount da cui era partito il flow ("hint" per il matching).
+  suggestedBankAccountId String?
+  createdAt     DateTime @default(now())
+  // Scadenza: dopo questa data il record va considerato non valido.
+  // 1 ora è abbondante per un utente che completa il consenso e arriva
+  // alla pagina di abbinamento; dopo l'utente deve rifare il flow.
+  expiresAt     DateTime
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+// ============== MERCATI / WATCHLIST ==============
+//
+// Modulo "Mercati": read-only, traccia l'andamento di strumenti finanziari
+// che l'utente vuole monitorare. NON è un portafoglio: non registra quote
+// possedute, non calcola P&L, non si integra con Transaction. È solo una
+// finestra sui dati di mercato.
+//
+// I prezzi vengono fetchati periodicamente da provider esterni (Twelve Data,
+// ECB, Stooq) o inseriti a mano (per fondi italiani senza API gratuita).
+// Lo storico AssetPrice serve per disegnare sparkline e calcolare variazioni.
+//
+// Tutto è scoped per Holder (coerentemente col resto del dominio): se Stefano
+// e Lorenzo seguono entrambi AAPL, ognuno avrà il proprio record Asset. È
+// una piccola duplicazione di chiamate API ma mantiene l'isolamento totale
+// tra Holder che è la regola di tutto il progetto.
+model Asset {
+  id              String   @id @default(cuid())
+  holderId        String
+
+  // "Ticker" canonico mostrato in UI. Univoco per Holder così l'utente non
+  // duplica accidentalmente. Convenzioni suggerite (non enforced):
+  //  - Azioni IT: "ENI.MI", "ENEL.MI" (suffisso .MI = Borsa Italiana)
+  //  - Azioni US: "AAPL", "MSFT"
+  //  - ETF UCITS: "CSPX.MI", "EUNL.DE" (con suffisso mercato)
+  //  - Indici: "FTSEMIB", "SPX", "DAX"
+  //  - Cambi: "EUR/USD", "EUR/GBP"
+  //  - Tassi: "ECB-MRO" (tasso main refinancing), "EURIBOR-3M"
+  //  - Fondi italiani: codice SGR o ISIN come fallback
+  symbol          String
+
+  // ISIN (12 chars) opzionale ma fortemente consigliato per ETF/fondi/bond:
+  // permette di disambiguare versioni dello stesso prodotto (es. ETF acc/dist)
+  // e di cercare il prezzo su provider alternativi se il principale fallisce.
+  isin            String?
+
+  // Nome display "umano" (es. "Eni S.p.A.", "iShares Core S&P 500 UCITS ETF
+  // (Acc)"). Editabile dall'utente.
+  name            String
+
+  // Categoria. Usata per filtri UI, raggruppamenti, e per scegliere il
+  // provider di default quando l'utente aggiunge un nuovo asset.
+  //  - stock      : azioni quotate
+  //  - etf        : ETF UCITS e simili
+  //  - index      : indici di borsa (FTSEMIB, SPX, ...)
+  //  - currency   : tassi di cambio (EUR/USD, ...)
+  //  - rate       : tassi macro (BCE, EURIBOR, ...)
+  //  - bond       : obbligazioni (BTP, corporate)
+  //  - fund       : fondi comuni (tipico per i fondi italiani gestiti SGR)
+  //  - crypto     : criptovalute
+  //  - other      : tutto il resto
+  assetClass      String
+
+  // Valuta in cui sono espresse le quotazioni. Per cambi è la valuta di
+  // destinazione (EUR/USD → "USD"). Per i tassi mettiamo "%" come
+  // convenzione (non è una valuta, ma serve a distinguere la formattazione).
+  currency        String   @default("EUR")
+
+  // Provider che fornisce le quotazioni. Determina come il refresh cron
+  // chiama l'endpoint esterno e come parsare la risposta. TUTTI i provider
+  // sono "zero-config": nessuna API key, nessuna registrazione.
+  //  - yahoo  : Yahoo Finance chart endpoint pubblico (azioni IT/US, ETF, indici,
+  //             cambi, cripto). Motore principale per quasi tutto.
+  //  - ecb    : European Central Bank Statistical Data Warehouse (cambi EUR/X
+  //             ufficiali e tassi BCE/EURIBOR). No auth.
+  //  - stooq  : Stooq CSV pubblico, fallback EOD per quando Yahoo non risponde
+  //             o non riconosce il simbolo (utile per Borsa Italiana legacy).
+  //  - manual : nessun fetch automatico, l'utente aggiorna il NAV a mano.
+  //             Caso d'uso: fondi italiani SGR (Anima, Mediolanum, Eurizon, ecc.)
+  //             che non sono coperti dalle fonti pubbliche.
+  provider        String   @default("yahoo")
+
+  // Symbol nel formato richiesto dal provider. Permette di tenere `symbol`
+  // come label umana e mappare al formato provider sotto (es. UI mostra
+  // "EUR/USD" ma ECB vuole "USD" perché pubblica solo i tassi EUR→X).
+  // Per provider=manual può essere vuoto.
+  providerSymbol  String
+
+  // Note libere dell'utente (es. "comprato a 25€ il 2024-01-10").
+  notes           String?
+
+  // Ordine in tabella. Permette drag&drop futuro senza schema migration.
+  position        Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  holder          Holder       @relation(fields: [holderId], references: [id], onDelete: Cascade)
+  prices          AssetPrice[]
+
+  @@unique([holderId, symbol])
+  @@index([holderId, assetClass])
+}
+
+// Storico EOD dei prezzi di un Asset. Una riga = un giorno di quotazione.
+// Usato per:
+//  - mostrare il prezzo "ultimo" (la riga più recente)
+//  - calcolare variazione % (oggi vs riga precedente, vs -7gg, vs -30gg, vs -365gg)
+//  - disegnare la sparkline (ultime ~30 righe)
+//
+// NB: salviamo solo il close (prezzo di chiusura) per ridurre footprint.
+// Se in futuro servono open/high/low, si aggiungono.
+model AssetPrice {
+  id        String   @id @default(cuid())
+  assetId   String
+
+  // Data EOD del prezzo. Per i prezzi infraday/real-time userei lo stesso
+  // giorno e farei un upsert: l'ultima fetch della giornata vince.
+  date      DateTime
+
+  // Prezzo / valore di chiusura nella valuta dell'Asset.
+  close     Float
+
+  // Sorgente: replica di Asset.provider al momento del fetch. Utile per
+  // sapere "questo prezzo da dove arriva" se in futuro cambi provider.
+  source    String
+
+  createdAt DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, date])
+  @@index([assetId, date])
+}
