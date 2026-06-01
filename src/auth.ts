@@ -37,14 +37,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Nodemailer({
       from: process.env.EMAIL_FROM || "Finanza Personale <noreply@localhost>",
-      // Provider Resend per produzione, fallback "jsonTransport" in dev (link in console)
+      // Auth.js v5 valida `server` come SMTP config al boot. In dev (senza
+      // Resend) passiamo un fittizio "localhost:25" — NON viene mai usato
+      // perché `sendVerificationRequest` sotto stampa il link in console e
+      // ritorna prima di chiamare il transport. Mettere `{ jsonTransport: true }`
+      // qui rompe Auth.js perché non è un campo SMTP valido (causa "Server
+      // error - configuration" alla login).
       server: useResend
         ? {
             host: "smtp.resend.com",
             port: 465,
             auth: { user: "resend", pass: process.env.RESEND_API_KEY! },
           }
-        : { jsonTransport: true },
+        : {
+            host: "localhost",
+            port: 25,
+            auth: { user: "_", pass: "_" },
+          },
       sendVerificationRequest: async ({ identifier, url, provider }) => {
         // Estrae l'host dall'URL del callback (es. "finanza-personale.app").
         // Usato nel footer dell'email per orientare l'utente.
@@ -88,4 +97,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  callbacks: {
+    /**
+     * Whitelist email: solo le email in AUTHORIZED_EMAILS (CSV) possono
+     * accedere. Tutte le altre vengono rifiutate prima ancora di ricevere il
+     * magic link, evitando di creare utenti fantasma in DB.
+     *
+     * In dev locale (env vuota o non impostata) NESSUNA restrizione — chiunque
+     * può loggarsi. Comodo per testare senza dover modificare la whitelist a
+     * ogni nuovo email di test.
+     *
+     * Per allargare/restringere in prod: modifica la env var AUTHORIZED_EMAILS
+     * su Vercel project settings (formato CSV: "a@x.com,b@y.com").
+     */
+    async signIn({ user }) {
+      const raw = process.env.AUTHORIZED_EMAILS?.trim();
+      if (!raw) return true; // dev: niente restrizione
+      const allowed = new Set(
+        raw
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const email = user?.email?.toLowerCase();
+      if (!email) return false;
+      return allowed.has(email);
+    },
+  },
 });

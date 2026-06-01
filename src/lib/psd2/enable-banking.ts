@@ -9,7 +9,13 @@
  *
  * Configurazione richiesta (env vars):
  *  - ENABLE_BANKING_APP_ID         : UUID dell'application (kid del JWT)
- *  - ENABLE_BANKING_PRIVATE_KEY_PATH : path assoluto al file .pem della private key
+ *  - PRIVATE KEY — uno dei due:
+ *      * ENABLE_BANKING_PRIVATE_KEY_PEM  : contenuto del .pem come stringa
+ *                                         (richiesto in prod su Vercel —
+ *                                          niente filesystem persistente)
+ *      * ENABLE_BANKING_PRIVATE_KEY_PATH : path assoluto al file .pem
+ *                                         (comodo in dev locale)
+ *    Se sono presenti entrambi, PEM ha precedenza.
  *  - ENABLE_BANKING_BASE_URL       : opzionale, default https://api.tilisy.com
  */
 
@@ -19,25 +25,34 @@ import { createSign } from "node:crypto";
 // Env vars risolte lazy (al primo uso) e non al module-load:
 // gli import ES sono hoisted, quindi se leggessimo process.env al top-level
 // gli script CLI che caricano .env.local manualmente non funzionerebbero.
-function requireEnv(): { appId: string; keyPath: string; baseUrl: string } {
+function requireEnv(): { appId: string; baseUrl: string } {
   const appId = process.env.ENABLE_BANKING_APP_ID;
-  const keyPath = process.env.ENABLE_BANKING_PRIVATE_KEY_PATH;
   const baseUrl = process.env.ENABLE_BANKING_BASE_URL ?? "https://api.tilisy.com";
   if (!appId) {
-    throw new Error("ENABLE_BANKING_APP_ID non configurato in .env.local");
+    throw new Error("ENABLE_BANKING_APP_ID non configurato");
   }
-  if (!keyPath) {
-    throw new Error("ENABLE_BANKING_PRIVATE_KEY_PATH non configurato in .env.local");
-  }
-  return { appId, keyPath, baseUrl };
+  return { appId, baseUrl };
 }
 
 // La private key viene letta una sola volta e tenuta in memoria del processo.
+// Prima cerca il valore stringa diretto (prod Vercel), poi fa fallback su file
+// (dev locale). Lancia errore esplicito se nessuno dei due è configurato.
 let cachedKey: string | null = null;
-function getPrivateKey(keyPath: string): string {
+function getPrivateKey(): string {
   if (cachedKey) return cachedKey;
-  cachedKey = readFileSync(keyPath, "utf-8");
-  return cachedKey;
+  const pem = process.env.ENABLE_BANKING_PRIVATE_KEY_PEM;
+  if (pem && pem.includes("BEGIN")) {
+    cachedKey = pem;
+    return cachedKey;
+  }
+  const keyPath = process.env.ENABLE_BANKING_PRIVATE_KEY_PATH;
+  if (keyPath) {
+    cachedKey = readFileSync(keyPath, "utf-8");
+    return cachedKey;
+  }
+  throw new Error(
+    "Private key Enable Banking non configurata: imposta ENABLE_BANKING_PRIVATE_KEY_PEM (prod) o ENABLE_BANKING_PRIVATE_KEY_PATH (dev)",
+  );
 }
 
 // ===== JWT helpers =====
@@ -56,7 +71,7 @@ function base64url(input: Buffer | string): string {
  * Firma RS256 con la private key dell'application.
  */
 export function makeJwt(ttlSec: number = 3600): string {
-  const { appId, keyPath } = requireEnv();
+  const { appId } = requireEnv();
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(
     JSON.stringify({ typ: "JWT", alg: "RS256", kid: appId }),
@@ -73,7 +88,7 @@ export function makeJwt(ttlSec: number = 3600): string {
   const signer = createSign("RSA-SHA256");
   signer.update(data);
   signer.end();
-  const sig = base64url(signer.sign(getPrivateKey(keyPath)));
+  const sig = base64url(signer.sign(getPrivateKey()));
   return `${data}.${sig}`;
 }
 

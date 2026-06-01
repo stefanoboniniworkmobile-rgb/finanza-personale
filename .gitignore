@@ -6,6 +6,9 @@ node_modules
 *.log
 prisma/db.sqlite
 prisma/db.sqlite-journal
+prisma/db.sqlite.backup-*
+prisma/*.bak
 .vercel
+tsconfig.tsbuildinfo
 
 certificates

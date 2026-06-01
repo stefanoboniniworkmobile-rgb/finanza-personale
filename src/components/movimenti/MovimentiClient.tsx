@@ -41,6 +41,12 @@ export type MovimentoRow = {
   transferGroupId: string | null;
   counterpartBankAccountId: string | null;
   counterpartBankAccountName: string | null;
+  // Origine del movimento — derivata dalla presenza di bankConnectionId
+  // (PSD2 sync da banca) o importBatchId (import file CSV/Excel/PDF). Se
+  // entrambi assenti = manuale. `sourceLabel` è il nome leggibile della
+  // banca o del batch, usato come tooltip del badge.
+  source: "manual" | "import" | "psd2";
+  sourceLabel: string | null;
 };
 
 export type AccountInfo = {
@@ -323,10 +329,11 @@ export function MovimentiClient({
                   </td>
                   <td>
                     <div
-                      className="whitespace-normal break-words leading-snug max-w-[520px]"
+                      className="whitespace-normal break-words leading-snug max-w-[520px] flex items-baseline gap-2"
                       title={r.description}
                     >
-                      {r.description}
+                      <span className="flex-1">{r.description}</span>
+                      <SourceBadge source={r.source} label={r.sourceLabel} />
                     </div>
                     {r.notes && (
                       <div
@@ -421,5 +428,51 @@ export function MovimentiClient({
         paymentMethods={paymentMethods}
       />
     </>
+  );
+}
+
+/**
+ * Badge origine del movimento. Tre stati: manuale, importato (file CSV/Excel/PDF),
+ * PSD2 (sync banca via Enable Banking). I primi due si distinguono per colore
+ * sottile; il tooltip ne svela la fonte specifica (nome del file o della banca).
+ *
+ * I dati arrivano già calcolati dal server component (vedi `movimenti/page.tsx`
+ * → mapping txs.map). Niente fetch o calcolo qui dentro.
+ */
+function SourceBadge({
+  source,
+  label,
+}: {
+  source: "manual" | "import" | "psd2";
+  label: string | null;
+}) {
+  if (source === "manual") {
+    return (
+      <span
+        className="text-[10px] font-medium uppercase tracking-wide text-sub bg-line2/60 border border-line2 rounded px-1.5 py-px shrink-0"
+        title="Inserito a mano"
+      >
+        Man.
+      </span>
+    );
+  }
+  if (source === "import") {
+    return (
+      <span
+        className="text-[10px] font-medium uppercase tracking-wide text-acc-700 bg-acc-50 border border-acc-100 rounded px-1.5 py-px shrink-0"
+        title={label ? `Importato dal file: ${label}` : "Importato da file"}
+      >
+        Imp.
+      </span>
+    );
+  }
+  // psd2
+  return (
+    <span
+      className="text-[10px] font-medium uppercase tracking-wide text-brand-600 bg-brand-50 border border-brand-500/30 rounded px-1.5 py-px shrink-0"
+      title={label ? `Sincronizzato da: ${label}` : "Sincronizzato da banca via PSD2"}
+    >
+      PSD2
+    </span>
   );
 }

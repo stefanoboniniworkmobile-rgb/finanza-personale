@@ -1,14 +1,21 @@
 // Schema database Finanza Personale
-// In sviluppo: SQLite (basta avere un file).
-// In produzione: cambia provider a "postgresql" e aggiorna DATABASE_URL.
+// Produzione: PostgreSQL (Supabase, regione EU).
+// Per dev locale con SQLite: cambiare provider a "sqlite" e usare
+// DATABASE_URL="file:./db.sqlite". Schema 100% portabile tra i due:
+// solo Float come tipo "esteso" (mappato a "double precision" su pg).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Prisma migrate/db push usa la connessione DIRECT (Session pooler o
+  // 5432), mentre il runtime app usa la connessione transaction pooler
+  // (6543, pgbouncer) — viene risolta dinamicamente da PRISMA, ma per
+  // sicurezza Vercel useremo DIRECT_URL come override per migrate.
+  directUrl = env("DIRECT_URL")
 }
 
 // ============== AUTH (compatibile con Auth.js) ==============

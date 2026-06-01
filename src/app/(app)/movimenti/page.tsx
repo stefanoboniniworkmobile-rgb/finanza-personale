@@ -19,6 +19,7 @@ type SearchParams = Promise<{
   page?: string;
   ric?: "all" | "1" | "0"; // stato riconciliazione: tutti / riconciliati / da riconciliare
   ricNote?: string;        // CONTAINS sulla reconciliationNote
+  origine?: "all" | "manual" | "import" | "psd2"; // filtro origine movimento
 }>;
 
 const PAGE_SIZE = 50;
@@ -38,6 +39,9 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   const q = (sp.q ?? "").trim();
   const ric = sp.ric ?? "all";
   const ricNote = (sp.ricNote ?? "").trim();
+  // Filtro per origine movimento: manuale (entrambi i FK null),
+  // import (importBatchId valorizzato), psd2 (bankConnectionId valorizzato).
+  const origine = sp.origine ?? "all";
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
   // Carica dropdown options (sempre)
@@ -82,6 +86,17 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   if (ric === "1") where.reconciled = true;
   else if (ric === "0") where.reconciled = false;
   if (ricNote) where.reconciliationNote = { contains: ricNote };
+  // Filtro origine: manual = entrambi i FK null; import = importBatchId NOT
+  // null; psd2 = bankConnectionId NOT null. Sono mutuamente esclusivi
+  // (vincolo modellato nel commento dello schema Transaction).
+  if (origine === "manual") {
+    where.importBatchId = null;
+    where.bankConnectionId = null;
+  } else if (origine === "import") {
+    where.importBatchId = { not: null };
+  } else if (origine === "psd2") {
+    where.bankConnectionId = { not: null };
+  }
 
   const [total, txs, sumsByType] = await Promise.all([
     prisma.transaction.count({ where }),
@@ -90,7 +105,21 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: PAGE_SIZE,
       skip: (page - 1) * PAGE_SIZE,
-      include: { category: true, bankAccount: true, paymentMethod: true },
+      include: {
+        category: true,
+        bankAccount: true,
+        paymentMethod: true,
+        // Per il badge "Origine" — facciamo solo SELECT del nome per
+        // tooltip, evitando di tirare giù i campi pesanti del batch / connection.
+        importBatch: { select: { id: true, fileName: true } },
+        bankConnection: {
+          select: {
+            id: true,
+            aspspName: true,
+            bankAccount: { select: { name: true } },
+          },
+        },
+      },
     }),
     // Aggregato su TUTTO il set filtrato (non solo la pagina corrente)
     prisma.transaction.groupBy({
@@ -212,6 +241,14 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
       transferGroupId: tg ?? null,
       counterpartBankAccountId: sib?.otherBankAccountId ?? null,
       counterpartBankAccountName: sib?.otherBankAccountName ?? null,
+      // Origine: psd2 (sync banca) > import (file) > manual. Mutuamente
+      // esclusivi nel modello, ma per sicurezza valutiamo psd2 prima.
+      source: t.bankConnectionId
+        ? ("psd2" as const)
+        : t.importBatchId
+          ? ("import" as const)
+          : ("manual" as const),
+      sourceLabel: t.bankConnection?.aspspName ?? t.importBatch?.fileName ?? null,
     };
   });
 
@@ -333,6 +370,18 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
             <option value="all">Tutti</option>
             <option value="1">Riconciliati</option>
             <option value="0">Da riconciliare</option>
+          </select>
+        </FilterField>
+        <FilterField label="Origine">
+          <select
+            name="origine"
+            defaultValue={origine}
+            className="input !h-8 !py-0 min-w-[140px]"
+          >
+            <option value="all">Tutte</option>
+            <option value="manual">Manuale</option>
+            <option value="import">Importato (file)</option>
+            <option value="psd2">PSD2 (banca)</option>
           </select>
         </FilterField>
         <FilterField label="Nota riconc.">
