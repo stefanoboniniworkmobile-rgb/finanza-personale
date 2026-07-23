@@ -123,5 +123,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (!email) return false;
       return allowed.has(email);
     },
+
+    async session({ session, user }) {
+      if (session.user) {
+        (session.user as typeof session.user & { id?: string }).id = user.id;
+      }
+      return session;
+    },
   },
 });

@@ -35,6 +35,7 @@ export type DashboardData = {
     entratePeriod: number;
     uscitePeriod: number;
     netto: number; // entrate - uscite
+    excludedBalancePeriod: number;
     movimentiTotal: number;
     movimentiPeriod: number;
     daVerificare: number;  // numero di movimenti dell'Holder non ancora riconciliati (globale, non legato al periodo)
@@ -196,8 +197,11 @@ export async function loadDashboard(
 
   const isTransfer = (catId: string) => {
     const c = catById.get(catId);
-    return c && TRANSFER_NAMES.has(c.name);
+    return c && (c.isTransfer || TRANSFER_NAMES.has(c.name));
   };
+
+  const isVisibleInDashboard = (cat: { showInDashboard: boolean; id: string } | undefined) =>
+    !!cat && cat.showInDashboard && !isTransfer(cat.id);
 
   // ---------- TREND ULTIMI 6 MESI (ancorati all'ultimo mese del range) ----------
   const monthsBack = 5;
@@ -211,6 +215,7 @@ export async function loadDashboard(
   let uscitePeriod = 0;
   let entratePrev = 0;
   let uscitePrev = 0;
+  let excludedBalancePeriod = 0;
   let movimentiPeriod = 0;
   let cardsExposurePeriod = 0;
 
@@ -262,15 +267,15 @@ export async function loadDashboard(
         if (t.type === "income") ap.entrate += t.amount;
         else ap.uscite += t.amount;
       }
-      const acc = accById.get(t.bankAccountId);
-      if (acc?.type === "credit_card") {
-        cardsExposurePeriod +=
-          t.type === "income" ? t.amount : -t.amount;
-      }
     }
 
-    // Esclusi giroconti per entrate/uscite/composizione/trend
-    if (!isTransfer(t.categoryId)) {
+    const visibleInDashboard = isVisibleInDashboard(cat);
+    if (!visibleInDashboard && inPeriod) {
+      excludedBalancePeriod += t.type === "income" ? t.amount : -t.amount;
+    }
+
+    // Esclusi giroconti e categorie nascoste per entrate/uscite/composizione/trend
+    if (visibleInDashboard) {
       if (inPeriod) {
         movimentiPeriod++;
         if (t.type === "income") entratePeriod += t.amount;
@@ -323,8 +328,12 @@ export async function loadDashboard(
     const agg = accAgg.get(a.id)!;
     patrimonioTotal += agg.saldo;
     if (a.type === "savings") savings += agg.saldo;
-    else liquidity += agg.saldo;
+    else if (a.type === "liquidity" || a.type === "cash") liquidity += agg.saldo;
   }
+
+  cardsExposurePeriod = accounts
+    .filter((a) => a.type === "credit_card")
+    .reduce((sum, a) => sum + accAgg.get(a.id)!.saldo, 0);
 
   // ---------- TREND points ----------
   const fmtMonthAbbr = (ym: string) => {
@@ -461,6 +470,7 @@ export async function loadDashboard(
       entratePeriod,
       uscitePeriod,
       netto: entratePeriod - uscitePeriod,
+      excludedBalancePeriod,
       movimentiTotal: allTx.length,
       movimentiPeriod,
       daVerificare,

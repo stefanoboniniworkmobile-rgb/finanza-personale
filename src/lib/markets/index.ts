@@ -86,7 +86,8 @@ export async function fetchMarketData(
 /**
  * Suggerisce il provider di default in base a `assetClass`.
  * Usato dalla UI quando l'utente aggiunge un nuovo asset: pre-compila il
- * provider sensato (cambi/tassi → ECB ufficiale, tutto il resto → Yahoo).
+ * provider sensato (cambi/tassi → ECB ufficiale, fondi italiani → manuale,
+ * azioni/ETF/indici → Stooq come provider free/affidabile di default).
  * L'utente può sempre sovrascrivere nel form.
  */
 export function suggestProvider(assetClass: string): ProviderName {
@@ -96,17 +97,16 @@ export function suggestProvider(assetClass: string): ProviderName {
       return "ecb";
     case "fund":
       // I fondi italiani SGR non hanno API pubblica → manuale di default.
-      // Se in futuro l'utente vuole tracciare un fondo coperto da Yahoo
-      // (es. fondi US), può cambiare provider nel form.
       return "manual";
     case "stock":
     case "etf":
     case "index":
+      return "stooq";
     case "bond":
     case "crypto":
     case "other":
     default:
-      return "yahoo";
+      return "stooq";
   }
 }
 

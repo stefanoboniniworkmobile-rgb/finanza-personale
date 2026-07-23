@@ -125,9 +125,23 @@ export const shiftYm = (yyyymm: string, back: number): string => {
   return `${y}-${String(m).padStart(2, "0")}`;
 };
 
-/** Range [from,to] sotto forma di Date inclusivi del mese yyyymm */
+/** Range [from,to] sotto forma di Date inclusivi del mese yyyymm.
+ * Accetta sia un singolo mese `YYYY-MM` sia un range `YYYY-MM..YYYY-MM`.
+ */
 export const monthRange = (yyyymm: string): { from: Date; to: Date } => {
-  const [y, m] = yyyymm.split("-").map(Number);
+  const value = yyyymm.trim();
+
+  if (value.includes("..")) {
+    const [fromYm, toYm] = value.split("..");
+    const [fromY, fromM] = fromYm.split("-").map(Number);
+    const [toY, toM] = toYm.split("-").map(Number);
+    return {
+      from: new Date(fromY, fromM - 1, 1),
+      to: new Date(toY, toM, 1), // esclusivo
+    };
+  }
+
+  const [y, m] = value.split("-").map(Number);
   return {
     from: new Date(y, m - 1, 1),
     to: new Date(y, m, 1), // esclusivo

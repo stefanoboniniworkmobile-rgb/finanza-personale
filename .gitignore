@@ -12,3 +12,4 @@ prisma/*.bak
 tsconfig.tsbuildinfo
 
 certificates
+.env*

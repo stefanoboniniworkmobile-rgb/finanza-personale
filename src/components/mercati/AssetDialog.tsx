@@ -53,9 +53,9 @@ const ASSET_CLASS_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const PROVIDER_OPTIONS: { value: string; label: string; hint?: string }[] = [
-  { value: "yahoo", label: "Yahoo Finance", hint: "Azioni, ETF, indici, cambi — zero config" },
+  { value: "stooq", label: "Stooq", hint: "Provider free/EOD affidabile per azioni e indici" },
   { value: "ecb", label: "BCE (ufficiale)", hint: "Solo cambi EUR/X e tassi BCE" },
-  { value: "stooq", label: "Stooq (fallback)", hint: "EOD pubblico, copertura europea" },
+  { value: "yahoo", label: "Yahoo Finance", hint: "Legacy, più fragile con rate limit" },
   { value: "manual", label: "Manuale", hint: "Tu inserisci il prezzo a mano (fondi italiani)" },
 ];
 
@@ -65,7 +65,7 @@ const PROVIDER_OPTIONS: { value: string; label: string; hint?: string }[] = [
 function clientSuggestProvider(cls: string): string {
   if (cls === "currency" || cls === "rate") return "ecb";
   if (cls === "fund") return "manual";
-  return "yahoo";
+  return "stooq";
 }
 function clientSuggestProviderSymbol(symbol: string, provider: string): string {
   const s = symbol.trim();
@@ -105,7 +105,7 @@ export function AssetDialog({
   const [name, setName] = useState(initial?.name ?? "");
   const [assetClass, setAssetClass] = useState(initial?.assetClass ?? "stock");
   const [currency, setCurrency] = useState(initial?.currency ?? "EUR");
-  const [provider, setProvider] = useState(initial?.provider ?? "yahoo");
+  const [provider, setProvider] = useState(initial?.provider ?? "stooq");
   const [providerSymbol, setProviderSymbol] = useState(initial?.providerSymbol ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [initialPrice, setInitialPrice] = useState<number | null>(null);
@@ -123,7 +123,7 @@ export function AssetDialog({
     setName(initial?.name ?? "");
     setAssetClass(initial?.assetClass ?? "stock");
     setCurrency(initial?.currency ?? "EUR");
-    setProvider(initial?.provider ?? "yahoo");
+    setProvider(initial?.provider ?? "stooq");
     setProviderSymbol(initial?.providerSymbol ?? "");
     setNotes(initial?.notes ?? "");
     setInitialPrice(null);

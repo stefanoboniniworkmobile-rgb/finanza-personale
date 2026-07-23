@@ -1,15 +1,17 @@
 import Link from "next/link";
 import type { DashboardData } from "@/lib/dashboard";
-import { fmtEUR, fmtK, fmtPct, fmtN0 } from "@/lib/format";
+import { fmtEUR, fmtK, fmtN0 } from "@/lib/format";
 
 export function KpiStrip({ data }: { data: DashboardData }) {
   const k = data.kpi;
+  const encodedPeriod = encodeURIComponent(data.period);
   const tasso = k.entratePeriod > 0 ? Math.round((k.netto / k.entratePeriod) * 100) : 0;
   const items: KpiItem[] = [
     {
       label: "Patrimonio totale",
       value: fmtEUR(k.patrimonioTotal),
       sub: `Liq ${fmtK(k.liquidity)} · Risp ${fmtK(k.savings)}`,
+      href: "/conti",
     },
     {
       label: "Entrate",
@@ -19,6 +21,7 @@ export function KpiStrip({ data }: { data: DashboardData }) {
           ? "primo periodo"
           : `${k.deltaEntrate >= 0 ? "▲" : "▼"} ${Math.abs(k.deltaEntrate).toFixed(1)}% vs mese prec.`,
       cls: k.deltaEntrate >= 0 ? "delta-up" : "delta-down",
+      href: `/movimenti?period=${encodedPeriod}&tipo=income`,
     },
     {
       label: "Uscite",
@@ -28,30 +31,41 @@ export function KpiStrip({ data }: { data: DashboardData }) {
           ? "primo periodo"
           : `${k.deltaUscite <= 0 ? "▼" : "▲"} ${Math.abs(k.deltaUscite).toFixed(1)}% vs mese prec.`,
       cls: k.deltaUscite > 0 ? "delta-down" : "delta-up",
+      href: `/movimenti?period=${encodedPeriod}&tipo=expense`,
     },
     {
       label: "Netto",
       value: (k.netto >= 0 ? "+" : "") + fmtEUR(k.netto),
       sub: `${tasso}% tasso risparmio`,
       cls: k.netto >= 0 ? "delta-up" : "delta-down",
+      href: `/movimenti?period=${encodedPeriod}`,
     },
     {
       label: "Movimenti",
       value: fmtN0(k.movimentiTotal),
       sub: `${fmtN0(k.movimentiPeriod)} nel periodo`,
+      href: `/movimenti?period=${encodedPeriod}`,
+    },
+    {
+      label: "Escluse dalla dashboard",
+      value: fmtEUR(k.excludedBalancePeriod),
+      sub: "Saldo operazioni nascoste",
+      cls: k.excludedBalancePeriod < 0 ? "delta-down" : "delta-up",
+      href: `/movimenti?dashboard=excluded&period=${encodedPeriod}`,
     },
     {
       label: "Esposizione carte",
       value: fmtEUR(k.cardsExposure),
       sub: "Da regolare a fine mese",
       cls: k.cardsExposure < 0 ? "delta-down" : "",
+      href: "/conti?type=credit_card",
     },
     {
       label: "Da verificare",
       value: fmtN0(k.daVerificare),
       sub: k.daVerificare === 0 ? "Tutto riconciliato" : "Movimenti non riconciliati",
       cls: k.daVerificare > 0 ? "delta-down" : "delta-up",
-      href: "/movimenti?ric=0",
+      href: `/movimenti?ric=0&period=${encodedPeriod}`,
     },
   ];
 

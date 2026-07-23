@@ -6,7 +6,16 @@ import {
   MovimentiClient,
   type MovimentoRow,
 } from "@/components/movimenti/MovimentiClient";
-import { fmtEURFull, fmtMonthLong, fmtN0, monthRange, shiftYm, ymKey } from "@/lib/format";
+import {
+  fmtEURFull,
+  fmtMonthLong,
+  fmtN0,
+  fmtPeriodLabel,
+  monthRange,
+  parsePeriod,
+  shiftYm,
+  ymKey,
+} from "@/lib/format";
 import type { Prisma } from "@prisma/client";
 
 type SearchParams = Promise<{
@@ -20,6 +29,7 @@ type SearchParams = Promise<{
   ric?: "all" | "1" | "0"; // stato riconciliazione: tutti / riconciliati / da riconciliare
   ricNote?: string;        // CONTAINS sulla reconciliationNote
   origine?: "all" | "manual" | "import" | "psd2"; // filtro origine movimento
+  dashboard?: "all" | "excluded";
 }>;
 
 const PAGE_SIZE = 50;
@@ -31,7 +41,13 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   const holderId = holder.id;
 
   const sp = await props.searchParams;
-  const period = sp.period ?? "all";
+  const periodRaw = typeof sp.period === "string" ? sp.period.trim() : "all";
+  const period =
+    periodRaw === "all" ||
+    /^\d{4}-\d{2}$/.test(periodRaw) ||
+    /^\d{4}-\d{2}\.\.\d{4}-\d{2}$/.test(periodRaw)
+      ? periodRaw
+      : "all";
   const conto = sp.conto ?? "all";
   const cat = sp.cat ?? "all";
   const mod = sp.mod ?? "all";
@@ -39,6 +55,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   const q = (sp.q ?? "").trim();
   const ric = sp.ric ?? "all";
   const ricNote = (sp.ricNote ?? "").trim();
+  const dashboard = sp.dashboard ?? "all";
   // Filtro per origine movimento: manuale (entrambi i FK null),
   // import (importBatchId valorizzato), psd2 (bankConnectionId valorizzato).
   const origine = sp.origine ?? "all";
@@ -86,6 +103,12 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   if (ric === "1") where.reconciled = true;
   else if (ric === "0") where.reconciled = false;
   if (ricNote) where.reconciliationNote = { contains: ricNote };
+  if (dashboard === "excluded") {
+    where.OR = [
+      { category: { showInDashboard: false } },
+      { category: { isTransfer: true } },
+    ];
+  }
   // Filtro origine: manual = entrambi i FK null; import = importBatchId NOT
   // null; psd2 = bankConnectionId NOT null. Sono mutuamente esclusivi
   // (vincolo modellato nel commento dello schema Transaction).
@@ -268,6 +291,14 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
   const periodOpts: string[] = [];
   for (let i = 0; i < 18; i++) periodOpts.push(shiftYm(todayYm, i));
 
+  const periodRangeLabel =
+    period !== "all" && period.includes("..")
+      ? (() => {
+          const { from, to } = parsePeriod(period);
+          return fmtPeriodLabel(from, to);
+        })()
+      : null;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -297,6 +328,9 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
                 {fmtMonthLong(p)}
               </option>
             ))}
+            {periodRangeLabel && (
+              <option value={period}>{periodRangeLabel}</option>
+            )}
           </select>
         </FilterField>
         <FilterField label="Tipo">
@@ -384,6 +418,16 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
             <option value="psd2">PSD2 (banca)</option>
           </select>
         </FilterField>
+        <FilterField label="Dashboard">
+          <select
+            name="dashboard"
+            defaultValue={dashboard}
+            className="input !h-8 !py-0 min-w-[160px]"
+          >
+            <option value="all">Tutte</option>
+            <option value="excluded">Escluse dalla dashboard</option>
+          </select>
+        </FilterField>
         <FilterField label="Nota riconc.">
           <input
             type="text"
@@ -448,7 +492,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
           <PageLink
             page={page - 1}
             disabled={page <= 1}
-            params={{ period, conto, cat, mod, tipo, q, ric, ricNote }}
+            params={{ period, conto, cat, mod, tipo, q, ric, ricNote, dashboard }}
             label="← Prec."
           />
           <span className="text-sub">
@@ -457,7 +501,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
           <PageLink
             page={page + 1}
             disabled={page >= totalPages}
-            params={{ period, conto, cat, mod, tipo, q, ric, ricNote }}
+            params={{ period, conto, cat, mod, tipo, q, ric, ricNote, dashboard }}
             label="Succ. →"
           />
         </div>

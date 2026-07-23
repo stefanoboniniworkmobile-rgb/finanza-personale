@@ -4,14 +4,16 @@ import { redirect } from "next/navigation";
 import { getActiveHolder } from "@/lib/holder";
 import { ContiClient, type ContoRow } from "@/components/conti/ContiClient";
 
-export default async function ContiPage() {
+export default async function ContiPage(props: { searchParams: Promise<{ type?: "all" | "liquidity" | "credit_card" | "savings" | "cash" }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const holder = await getActiveHolder(session.user.id!);
   const holderId = holder.id;
+  const sp = await props.searchParams;
+  const type = sp.type ?? "all";
 
   const accounts = await prisma.bankAccount.findMany({
-    where: { holderId },
+    where: type === "all" ? { holderId } : { holderId, type },
     include: { _count: { select: { transactions: true } } },
     orderBy: { name: "asc" },
   });

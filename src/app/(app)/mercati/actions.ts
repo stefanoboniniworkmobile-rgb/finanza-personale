@@ -16,17 +16,25 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   fetchMarketData,
+  fetchStooq,
   fetchTwelveData,
   fetchYahooBatchQuote,
   searchYahoo,
   suggestProvider,
   suggestProviderSymbol,
+  yahooToStooqSymbol,
   yahooToTwelveDataSymbol,
   getCatalogGrouped,
+  getCatalogFlat,
   type AssetSearchHit,
   type CatalogGroup,
   type ProviderName,
 } from "@/lib/markets";
+import {
+  buildStalePriceMessage,
+  shouldUseLastKnownPrice,
+  shouldUseStooqFallback,
+} from "@/lib/markets/fallback";
 
 const ASSET_CLASSES = [
   "stock",
@@ -249,56 +257,96 @@ export async function refreshAsset(id: string): Promise<ActionResult> {
     { withHistory: true, historyDays: 60 },
   );
 
-  // ─── Fallback automatico Yahoo → Twelve Data su rate limit 429 ───────
-  // Quando Yahoo rate-limita pesantemente (HTTP 429), aspettare a volte
-  // non basta perché il blocco è sull'IP per qualche minuto. Twelve Data
-  // (free tier 800 chiamate/giorno) ha copertura ampia: azioni IT/USA/EU,
-  // ETF, indici, cambi, cripto. L'utente vede il refresh riuscire (con
-  // source="twelvedata-fallback" nel DB per tracciabilità).
-  //
-  // Pre-condizione: env var TWELVE_DATA_API_KEY popolata. Se manca, il
-  // provider risponde subito con errore esplicito e si vede nel pannello.
-  //
-  // Se anche TwD fallisce, concateniamo i due errori per dare visibilità
-  // diagnostica all'utente.
-  let usedFallback: false | "twelvedata" = false;
-  if (
-    !res.ok &&
-    asset.provider === "yahoo" &&
-    /troppe richieste|429/i.test(res.error)
-  ) {
-    const tdSym = yahooToTwelveDataSymbol(asset.providerSymbol, asset.assetClass);
-    if (tdSym) {
-      const tdRes = await fetchTwelveData(
+  // ─── Fallback gratuito su rate limit / provider bloccato ─────────────
+  // Per gli asset già esistenti che usano Yahoo, proviamo prima Stooq (free)
+  // e poi Twelve Data come secondo fallback se disponibile. Il messaggio
+  // mostrato all'utente resta neutro: non vogliamo più etichettare l'errore
+  // come "Yahoo" quando il problema è il provider di dati nel suo insieme.
+  let usedFallback: false | "stooq" | "twelvedata" = false;
+  if (!res.ok && shouldUseStooqFallback(res.error) && asset.provider === "yahoo") {
+    const stooqSymbol = yahooToStooqSymbol(asset.providerSymbol, asset.assetClass);
+    if (stooqSymbol) {
+      const stooqRes = await fetchStooq(
         {
           symbol: asset.symbol,
-          provider: "yahoo", // placeholder: TwD non è un ProviderName dello schema
-          providerSymbol: tdSym,
+          provider: "stooq",
+          providerSymbol: stooqSymbol,
           assetClass: asset.assetClass as "stock",
         },
         { withHistory: true, historyDays: 60 },
       );
-      if (tdRes.ok) {
-        res = tdRes;
-        usedFallback = "twelvedata";
+      if (stooqRes.ok) {
+        res = stooqRes;
+        usedFallback = "stooq";
       } else {
-        // TwD ha provato e fallito → concatena al messaggio Yahoo così
-        // l'utente vede entrambi i tentativi.
-        res = {
-          ok: false,
-          error: `Yahoo bloccato (429). Fallback Twelve Data "${tdSym}" non riuscito: ${tdRes.error}`,
-        };
+        const tdSym = yahooToTwelveDataSymbol(asset.providerSymbol, asset.assetClass);
+        if (tdSym) {
+          const tdRes = await fetchTwelveData(
+            {
+              symbol: asset.symbol,
+              provider: "yahoo",
+              providerSymbol: tdSym,
+              assetClass: asset.assetClass as "stock",
+            },
+            { withHistory: true, historyDays: 60 },
+          );
+          if (tdRes.ok) {
+            res = tdRes;
+            usedFallback = "twelvedata";
+          } else {
+            res = {
+              ok: false,
+              error: `Il provider di dati è temporaneamente limitato. Stooq e Twelve Data non hanno restituito dati: ${tdRes.error}`,
+            };
+          }
+        } else {
+          res = {
+            ok: false,
+            error: `Il provider di dati è temporaneamente limitato. Stooq non ha restituito dati: ${stooqRes.error}`,
+          };
+        }
       }
     } else {
-      // Symbol non convertibile → nessun fallback possibile.
-      res = {
-        ok: false,
-        error: `${res.error} (Nessun fallback Twelve Data disponibile per "${asset.providerSymbol}".)`,
-      };
+      const tdSym = yahooToTwelveDataSymbol(asset.providerSymbol, asset.assetClass);
+      if (tdSym) {
+        const tdRes = await fetchTwelveData(
+          {
+            symbol: asset.symbol,
+            provider: "yahoo",
+            providerSymbol: tdSym,
+            assetClass: asset.assetClass as "stock",
+          },
+          { withHistory: true, historyDays: 60 },
+        );
+        if (tdRes.ok) {
+          res = tdRes;
+          usedFallback = "twelvedata";
+        } else {
+          res = {
+            ok: false,
+            error: `Il provider di dati è temporaneamente limitato. Nessun fallback gratuito disponibile: ${tdRes.error}`,
+          };
+        }
+      } else {
+        res = {
+          ok: false,
+          error: `Il provider di dati è temporaneamente limitato. Nessun fallback gratuito disponibile.`,
+        };
+      }
     }
   }
 
   if (!res.ok) {
+    const lastKnown = await prisma.assetPrice.findFirst({
+      where: { assetId: id },
+      orderBy: { date: "desc" },
+      select: { close: true, date: true },
+    });
+
+    if (lastKnown && shouldUseLastKnownPrice(res.error)) {
+      return { ok: false, error: buildStalePriceMessage(res.error) };
+    }
+
     return { ok: false, error: res.error };
   }
 
@@ -325,7 +373,11 @@ export async function refreshAsset(id: string): Promise<ActionResult> {
   // abbiamo dovuto rinunciare a Yahoo per rate limit. Utile per analizzare
   // i dati storici e capire quale punto è arrivato da dove.
   const sourceTag =
-    usedFallback === "twelvedata" ? "twelvedata-fallback" : asset.provider;
+    usedFallback === "twelvedata"
+      ? "twelvedata-fallback"
+      : usedFallback === "stooq"
+        ? "stooq-fallback"
+        : asset.provider;
 
   // Batch upsert (Prisma non ha upsertMany, ciclo in transazione).
   await prisma.$transaction(
@@ -501,7 +553,18 @@ export async function searchAssets(
     return { ok: false, error: "Query troppo lunga" };
   }
   const results = await searchYahoo(q, 10);
-  return { ok: true, results };
+  if (results.length > 0) {
+    return { ok: true, results };
+  }
+
+  const catalog = getCatalogFlat()
+    .filter((hit) => {
+      const haystack = `${hit.symbol} ${hit.name}`.toLowerCase();
+      return haystack.includes(q.toLowerCase());
+    })
+    .slice(0, 10);
+
+  return { ok: true, results: catalog };
 }
 
 /**

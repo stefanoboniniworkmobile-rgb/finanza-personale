@@ -27,7 +27,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveAsset, searchAssets } from "@/app/(app)/mercati/actions";
 import { getCatalogFlat, type CatalogHit } from "@/lib/markets/catalog";
-import type { AssetSearchHit } from "@/lib/markets";
+import { yahooToStooqSymbol, type AssetSearchHit } from "@/lib/markets";
 
 /** Tipi filtrabili dal chip-row. "all" = tutti. */
 type TypeFilter =
@@ -261,8 +261,9 @@ export function AssetSearchDialog({
         name: hit.name,
         assetClass: hit.assetClass,
         currency: "EUR",
-        provider: "yahoo",
-        providerSymbol: hit.providerSymbol,
+        provider: "stooq",
+        providerSymbol:
+          yahooToStooqSymbol(hit.providerSymbol, hit.assetClass) ?? hit.providerSymbol,
         notes: null,
       });
       setPendingHit(null);

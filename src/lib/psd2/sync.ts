@@ -40,7 +40,15 @@ import {
 } from "./enable-banking";
 
 const INCREMENTAL_BUFFER_DAYS = 7;
+const PSD2_MAX_HISTORY_DAYS = 90;
 const FUZZY_WINDOW_DAYS = 5;
+
+function clampDateFromToPsd2History(dateFrom: string): string {
+  const earliest = new Date();
+  earliest.setDate(earliest.getDate() - PSD2_MAX_HISTORY_DAYS);
+  const earliestIso = earliest.toISOString().slice(0, 10);
+  return dateFrom < earliestIso ? earliestIso : dateFrom;
+}
 
 export type SyncOptions = {
   /** YYYY-MM-DD esplicito. Override su qualsiasi logica auto. */
@@ -325,6 +333,7 @@ export async function syncBankConnection(
     if (dateFrom > todayIso) {
       dateFrom = todayIso;
     }
+    dateFrom = clampDateFromToPsd2History(dateFrom);
   }
 
   // Categoria fallback "Da categorizzare PSD2": cerca o crea (solo in write mode).
