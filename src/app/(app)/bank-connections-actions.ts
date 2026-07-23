@@ -382,6 +382,10 @@ export type AspspOption = {
 export async function listAspspsAction(
   country: string = "IT",
 ): Promise<ActionResult<AspspOption[]>> {
+  // Anche se non tocca dati dell'utente, resta una server action pubblica che
+  // consuma quota Enable Banking: va protetta come le altre di questo file.
+  await requireUserId();
+
   try {
     const aspsps = await listAspsps(country);
     const filtered: AspspOption[] = aspsps
