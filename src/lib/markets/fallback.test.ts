@@ -15,6 +15,21 @@ test("buildStalePriceMessage uses a provider-neutral message", () => {
   assert.doesNotMatch(msg, /yahoo/i);
 });
 
+test("buildStalePriceMessage reports the last known price and its date", () => {
+  const msg = buildStalePriceMessage("fetch failed: timeout", {
+    close: 1234.5,
+    date: new Date(Date.UTC(2026, 6, 22)),
+  });
+  assert.match(msg, /1\.234,50/);
+  assert.match(msg, /22\/07\/2026/);
+});
+
+test("buildStalePriceMessage stays generic when no price is stored yet", () => {
+  const msg = buildStalePriceMessage("fetch failed: timeout");
+  assert.match(msg, /ultimo prezzo noto/i);
+  assert.doesNotMatch(msg, /\d{2}\/\d{2}\/\d{4}/);
+});
+
 test("suggestProvider prefers Stooq for equity-like assets", () => {
   assert.equal(suggestProvider("stock"), "stooq");
   assert.equal(suggestProvider("etf"), "stooq");

@@ -344,7 +344,7 @@ export async function refreshAsset(id: string): Promise<ActionResult> {
     });
 
     if (lastKnown && shouldUseLastKnownPrice(res.error)) {
-      return { ok: false, error: buildStalePriceMessage(res.error) };
+      return { ok: false, error: buildStalePriceMessage(res.error, lastKnown) };
     }
 
     return { ok: false, error: res.error };
