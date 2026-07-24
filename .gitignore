@@ -13,3 +13,4 @@ tsconfig.tsbuildinfo
 
 certificates
 .env*
+!.env.example
