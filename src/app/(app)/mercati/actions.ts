@@ -492,13 +492,34 @@ export async function refreshAllAssets(): Promise<
       // Tutti gli asset Yahoo falliscono in blocco col messaggio del batch.
       // L'utente può cliccare "Riprova" sui singoli (refreshAsset usa
       // l'endpoint chart, con cookie+crumb + fallback TwD se 429).
+      //
+      // Se l'errore è transitorio, allineiamo il messaggio a quello di
+      // refreshAsset: per ogni asset che ha già un prezzo in DB mostriamo
+      // valore + data dell'ultimo noto invece dell'errore grezzo del batch.
+      const transient = shouldUseLastKnownPrice(batch.error);
+      const lastKnownByAsset = transient
+        ? new Map(
+            (
+              await prisma.assetPrice.findMany({
+                where: { assetId: { in: yahooAssets.map((a) => a.id) } },
+                orderBy: { date: "desc" },
+                distinct: ["assetId"],
+                select: { assetId: true, close: true, date: true },
+              })
+            ).map((p) => [p.assetId, { close: p.close, date: p.date }]),
+          )
+        : null;
+
       for (const a of yahooAssets) {
         errors++;
+        const lastKnown = lastKnownByAsset?.get(a.id);
         failures.push({
           id: a.id,
           symbol: a.symbol,
           name: a.name,
-          error: batch.error,
+          error: lastKnown
+            ? buildStalePriceMessage(batch.error, lastKnown)
+            : batch.error,
         });
       }
     }
