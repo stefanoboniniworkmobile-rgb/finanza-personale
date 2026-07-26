@@ -25,9 +25,15 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveAsset, searchAssets } from "@/app/(app)/mercati/actions";
+import {
+  saveAsset,
+  searchAssets,
+  resolveAssetByIsin,
+} from "@/app/(app)/mercati/actions";
 import { getCatalogFlat, type CatalogHit } from "@/lib/markets/catalog";
-import { yahooToStooqSymbol, type AssetSearchHit } from "@/lib/markets";
+import { type AssetSearchHit } from "@/lib/markets";
+import { isValidIsin } from "@/lib/markets/openfigi";
+import type { IsinResolution } from "@/lib/markets/isin";
 
 /** Tipi filtrabili dal chip-row. "all" = tutti. */
 type TypeFilter =
@@ -132,6 +138,10 @@ export function AssetSearchDialog({
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [yahooResults, setYahooResults] = useState<AssetSearchHit[]>([]);
   const [yahooLoading, setYahooLoading] = useState(false);
+  // Modalità ISIN: se l'utente incolla un ISIN, risolviamo nome (Bloomberg)
+  // + simbolo/prezzo (Yahoo) + confidenza invece della ricerca testuale.
+  const [isinRes, setIsinRes] = useState<IsinResolution | null>(null);
+  const [isinLoading, setIsinLoading] = useState(false);
 
   // Riga in pending mentre saveAsset è in corso (per disabilitare la riga
   // cliccata e mostrare spinner inline).
@@ -165,17 +175,33 @@ export function AssetSearchDialog({
     if (!open && el.open) el.close();
   }, [open]);
 
-  // Debounce della search Yahoo
+  // Debounce: ISIN → risoluzione Bloomberg+Yahoo; altrimenti search testuale.
   useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
+    const raw = query.trim();
+    const code = raw.toUpperCase();
+    setIsinRes(null);
+
+    if (isValidIsin(code)) {
+      setYahooResults([]);
+      setYahooLoading(false);
+      setIsinLoading(true);
+      const t = setTimeout(async () => {
+        const r = await resolveAssetByIsin(code);
+        setIsinRes(r.ok ? r.data : null);
+        setIsinLoading(false);
+      }, 350);
+      return () => clearTimeout(t);
+    }
+
+    setIsinLoading(false);
+    if (raw.length < 2) {
       setYahooResults([]);
       setYahooLoading(false);
       return;
     }
     setYahooLoading(true);
     const t = setTimeout(async () => {
-      const res = await searchAssets(q);
+      const res = await searchAssets(raw);
       if (res.ok) setYahooResults(res.results);
       else setYahooResults([]);
       setYahooLoading(false);
@@ -191,6 +217,7 @@ export function AssetSearchDialog({
   // In entrambi i casi la lista viene raggruppata: per `category` se viene
   // dal catalogo, per `assetClass` (label) altrimenti.
   const isSearchMode = query.trim().length >= 2;
+  const isIsinMode = isValidIsin(query.trim().toUpperCase());
 
   type Group = { label: string; items: UnifiedHit[] };
 
@@ -261,9 +288,8 @@ export function AssetSearchDialog({
         name: hit.name,
         assetClass: hit.assetClass,
         currency: "EUR",
-        provider: "stooq",
-        providerSymbol:
-          yahooToStooqSymbol(hit.providerSymbol, hit.assetClass) ?? hit.providerSymbol,
+        provider: "yahoo",
+        providerSymbol: hit.providerSymbol,
         notes: null,
       });
       setPendingHit(null);
@@ -276,6 +302,32 @@ export function AssetSearchDialog({
       // Lascia aperto il dialog per aggiungere altri asset di fila —
       // chiudere richiede di cliccare la X o "Chiudi" in basso. Più
       // veloce per chi vuole popolare la watchlist con 5-10 asset.
+    });
+  };
+
+  /** Aggiunge l'asset risolto da ISIN: nome Bloomberg + simbolo/prezzo Yahoo. */
+  const addFromIsin = (r: IsinResolution) => {
+    if (!r.yahoo) return;
+    setPendingHit("ISIN");
+    setToast(null);
+    startSave(async () => {
+      const res = await saveAsset({
+        symbol: r.yahoo!.symbol,
+        isin: r.isin,
+        name: r.figiName ?? r.yahoo!.name,
+        assetClass: r.yahoo!.assetClass,
+        currency: r.currency ?? "EUR",
+        provider: "yahoo",
+        providerSymbol: r.yahoo!.symbol,
+        notes: null,
+      });
+      setPendingHit(null);
+      if (!res.ok) {
+        setToast({ kind: "err", msg: res.error });
+        return;
+      }
+      setToast({ kind: "ok", msg: `Aggiunto: ${r.figiName ?? r.yahoo!.name}` });
+      router.refresh();
     });
   };
 
@@ -362,11 +414,17 @@ export function AssetSearchDialog({
                 </button>
               ))}
               <div className="ml-auto text-[11px] text-sub">
-                {isSearchMode
-                  ? yahooLoading
-                    ? "Cercando…"
-                    : `${totalShown} da Yahoo`
-                  : `${totalShown} dal catalogo`}
+                {isIsinMode
+                  ? isinLoading
+                    ? "Risolvo ISIN…"
+                    : isinRes
+                      ? "ISIN risolto"
+                      : "ISIN non trovato"
+                  : isSearchMode
+                    ? yahooLoading
+                      ? "Cercando…"
+                      : `${totalShown} da Yahoo`
+                    : `${totalShown} dal catalogo`}
               </div>
             </div>
           </div>
@@ -386,6 +444,16 @@ export function AssetSearchDialog({
 
         {/* Lista risultati */}
         <div className="overflow-y-auto flex-1 min-h-[200px]">
+          {isIsinMode ? (
+            <IsinAddCard
+              loading={isinLoading}
+              res={isinRes}
+              pending={pendingHit === "ISIN"}
+              onAdd={addFromIsin}
+              onManual={onOpenManual}
+            />
+          ) : (
+          <>
           {/* Modalità ricerca con loading */}
           {isSearchMode && yahooLoading && (
             <div className="px-4 py-3 text-xs text-sub italic">Cercando su Yahoo…</div>
@@ -451,6 +519,8 @@ export function AssetSearchDialog({
               })}
             </div>
           ))}
+          </>
+          )}
         </div>
 
         {/* Footer */}
@@ -468,6 +538,116 @@ export function AssetSearchDialog({
         </div>
       </div>
     </dialog>
+  );
+}
+
+/**
+ * Card mostrata quando l'utente incolla un ISIN: nome autorevole da Bloomberg
+ * (OpenFIGI), simbolo/prezzo da Yahoo e punteggio di confidenza sul fatto che
+ * il simbolo Yahoo sia davvero quello strumento.
+ */
+function IsinAddCard({
+  loading,
+  res,
+  pending,
+  onAdd,
+  onManual,
+}: {
+  loading: boolean;
+  res: IsinResolution | null;
+  pending: boolean;
+  onAdd: (r: IsinResolution) => void;
+  onManual: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="px-4 py-6 text-sm text-sub italic">
+        Risolvo l&apos;ISIN su Bloomberg e Yahoo…
+      </div>
+    );
+  }
+  if (!res) {
+    return (
+      <div className="px-4 py-6 text-center text-sm text-sub space-y-2">
+        <div>ISIN non riconosciuto. Verifica il codice o inseriscilo a mano.</div>
+        <button
+          type="button"
+          onClick={onManual}
+          className="text-xs text-brand-600 hover:underline"
+        >
+          Inseriscilo manualmente →
+        </button>
+      </div>
+    );
+  }
+
+  const c = res.confidence;
+  const tone =
+    c.level === "alta"
+      ? { box: "border-ok-100 bg-ok-50", chip: "border-ok-100 text-ok-600", label: "Alta" }
+      : c.level === "media"
+        ? { box: "border-warn-100 bg-warn-50", chip: "border-warn-100 text-warn-600", label: "Media" }
+        : { box: "border-err-100 bg-err-50", chip: "border-err-100 text-err-600", label: "Bassa" };
+
+  return (
+    <div className="p-4">
+      <div className={`rounded-lg border p-3.5 space-y-2.5 ${tone.box}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-sub mb-0.5">
+              Nome (Bloomberg)
+            </div>
+            <div className="text-sm font-semibold leading-snug">
+              {res.figiName ?? "Non trovato su OpenFIGI"}
+            </div>
+          </div>
+          <span
+            className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-white ${tone.chip}`}
+          >
+            Confidenza {tone.label} · {c.percent}%
+          </span>
+        </div>
+
+        <div className="text-xs text-sub num-mono">
+          {res.yahoo
+            ? `${res.yahoo.symbol} · ${res.price != null ? res.price : "—"} ${res.currency ?? ""}`
+            : "Yahoo: nessun simbolo per questo ISIN"}
+        </div>
+
+        <ul className="text-[11px] text-sub space-y-0.5 list-disc pl-4">
+          {c.reasons.map((x, i) => (
+            <li key={i}>{x}</li>
+          ))}
+        </ul>
+
+        {c.level !== "alta" && res.yahoo && (
+          <div className={`text-[11px] font-medium ${tone.chip.split(" ")[1]}`}>
+            Verifica il prezzo/NAV su una fonte ufficiale prima di fidarti.
+          </div>
+        )}
+
+        <div className="pt-1">
+          {res.yahoo ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onAdd(res)}
+              className="btn !h-8 !text-xs disabled:opacity-50"
+            >
+              {pending ? "Aggiungendo…" : "Aggiungi alla watchlist"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onManual}
+              className="btn-ghost !h-8 !text-xs"
+            >
+              Nessun prezzo Yahoo — inseriscilo manualmente →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
