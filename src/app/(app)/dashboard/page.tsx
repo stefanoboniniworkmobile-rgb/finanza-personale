@@ -78,11 +78,11 @@ export default async function DashboardPage(props: { searchParams: SearchParams 
 
       <DashboardTabs
         panoramica={
-          <div className="grid grid-cols-12 gap-4">
-            <div className="col-span-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="lg:col-span-8">
               <MonthlyTrendChart data={data.trend} />
             </div>
-            <div className="col-span-4">
+            <div className="lg:col-span-4">
               <CategoriesDonut
                 slices={data.topCategories}
                 totalUscite={data.kpi.uscitePeriod}
@@ -118,7 +118,7 @@ function PageHeader({
   options: string[];
 }) {
   return (
-    <div className="flex items-center justify-between mb-4 gap-4">
+    <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
       <div>
         <div className="text-xs text-sub">Dashboard</div>
         <h1 className="text-xl font-semibold tracking-tight">

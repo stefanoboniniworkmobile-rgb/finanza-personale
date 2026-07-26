@@ -6,6 +6,7 @@ import { getActiveHolder, listHolders } from "@/lib/holder";
 import { HolderSwitcher } from "@/components/layout/HolderSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { SidebarNav } from "@/components/layout/SidebarNav";
+import { MobileNav } from "@/components/layout/MobileNav";
 import { APP_VERSION, APP_CREDIT } from "@/lib/version";
 
 export default async function AppLayout({
@@ -28,7 +29,9 @@ export default async function AppLayout({
     <div>
       {/* Top bar */}
       <header className="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-20">
-        <div className="h-[52px] px-4 flex items-center gap-3">
+        <div className="h-[52px] px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
+          <MobileNav />
+
           <Link
             href="/dashboard"
             className="flex items-center gap-2.5 shrink-0"
@@ -36,12 +39,12 @@ export default async function AppLayout({
             <div className="w-8 h-8 rounded-[9px] bg-ink grid place-items-center text-white shadow-sm">
               <Euro size={17} strokeWidth={2.25} />
             </div>
-            <span className="font-semibold text-[13.5px] tracking-tight text-ink">
+            <span className="hidden sm:inline font-semibold text-[13.5px] tracking-tight text-ink">
               Finanza&nbsp;Personale
             </span>
           </Link>
 
-          <div className="w-px h-5 bg-line mx-1.5" aria-hidden />
+          <div className="hidden sm:block w-px h-5 bg-line mx-1.5" aria-hidden />
 
           <HolderSwitcher
             holders={allHolders.map((h) => ({ id: h.id, name: h.name }))}
@@ -70,8 +73,8 @@ export default async function AppLayout({
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-56 shrink-0 border-r border-line bg-white min-h-[calc(100vh-52px)] sticky top-[52px] self-start flex flex-col">
+        {/* Sidebar (solo desktop; su mobile → drawer in MobileNav) */}
+        <aside className="hidden md:flex w-56 shrink-0 border-r border-line bg-white min-h-[calc(100vh-52px)] sticky top-[52px] self-start flex-col">
           <SidebarNav />
           <div className="mt-auto px-4 py-3 border-t border-line text-[10px] leading-relaxed text-sub">
             <div className="num-mono">v{APP_VERSION}</div>
@@ -79,7 +82,7 @@ export default async function AppLayout({
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 p-6">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );
