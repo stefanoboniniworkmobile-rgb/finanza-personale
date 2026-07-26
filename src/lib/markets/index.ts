@@ -87,8 +87,12 @@ export async function fetchMarketData(
  * Suggerisce il provider di default in base a `assetClass`.
  * Usato dalla UI quando l'utente aggiunge un nuovo asset: pre-compila il
  * provider sensato (cambi/tassi → ECB ufficiale, fondi italiani → manuale,
- * azioni/ETF/indici → Stooq come provider free/affidabile di default).
- * L'utente può sempre sovrascrivere nel form.
+ * azioni/ETF/indici/crypto → Yahoo).
+ *
+ * Perché Yahoo e non Stooq: verifica empirica (luglio 2026) — Stooq risponde
+ * con una challenge anti-bot JavaScript (HTML, non CSV) da server, quindi è
+ * inutilizzabile; Yahoo v8 chart funziona con User-Agent minimale. L'utente
+ * può comunque sovrascrivere il provider nel form.
  */
 export function suggestProvider(assetClass: string): ProviderName {
   switch (assetClass) {
@@ -101,12 +105,12 @@ export function suggestProvider(assetClass: string): ProviderName {
     case "stock":
     case "etf":
     case "index":
-      return "stooq";
+      return "yahoo";
     case "bond":
     case "crypto":
     case "other":
     default:
-      return "stooq";
+      return "yahoo";
   }
 }
 

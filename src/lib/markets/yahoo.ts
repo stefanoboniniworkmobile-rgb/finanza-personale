@@ -38,176 +38,43 @@ const SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search";
 const QUOTE_BATCH_URL = "https://query1.finance.yahoo.com/v7/finance/quote";
 
 /**
- * Headers "browser-like" comuni a tutte le chiamate Yahoo.
+ * Headers per le chiamate Yahoo: solo uno User-Agent MINIMALE ("Mozilla/5.0").
  *
- * Yahoo distingue tra "richieste sospette da bot" e "richieste da browser"
- * NON solo guardando lo User-Agent ma anche `Referer`, `Origin`,
- * `Accept-Language`, `Accept-Encoding` e l'insieme dei `Sec-Fetch-*`
- * (questi ultimi non possibili in fetch lato server). Senza Referer/Origin
- * Yahoo risponde sistematicamente HTTP 429 anche alla prima chiamata —
- * NON è un vero rate limit, è bot detection.
- *
- * Verifica empirica (2026-05-27): dal terminale Mac di Stefano curl con
- * solo `-A 'Mozilla/5.0'` ritorna HTTP/2 200 con JSON valido. Da fetch
- * Node con stesso UA ma senza Referer/Origin → 429. Aggiungere Referer
- * + Origin di finance.yahoo.com sblocca le chiamate.
+ * Fatto misurato (luglio 2026, IP datacenter, 5+ campioni per endpoint su
+ * search v1 e chart v8):
+ *   - User-Agent lungo (stringa Safari completa) → HTTP 429 su TUTTI i campioni
+ *   - User-Agent corto "Mozilla/5.0"             → HTTP 200 su TUTTI i campioni
+ * È deterministico, non rate-limit casuale: Yahoo blocca lo UA "browser
+ * completo" da server e accetta quello minimale. Referer/Origin NON c'entrano
+ * (li avevo incolpati per errore). Se in futuro tornasse a dare 429, ri-misurare
+ * con lo stesso metodo prima di cambiare qualcosa.
  */
 const YAHOO_HEADERS: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-  Accept: "application/json, text/plain, */*",
-  "Accept-Language": "en-US,en;q=0.9,it;q=0.8",
-  "Accept-Encoding": "gzip, deflate, br",
-  Referer: "https://finance.yahoo.com/",
-  Origin: "https://finance.yahoo.com",
-  "Cache-Control": "no-cache",
+  "User-Agent": "Mozilla/5.0",
 };
 
 /**
- * Sessione Yahoo: cookie + crumb. Cached in memoria per ~1h.
+ * Fetch verso Yahoo con retry su 429.
  *
- * Yahoo Finance richiede una "session" valida per le chiamate API server-
- * side. Il flusso è quello che usano yfinance (Python) e altre librerie:
+ * NIENTE cookie/crumb: il vecchio flusso getcrumb faceva 2-3 richieste extra
+ * per ogni chiamata e, moltiplicato per i retry, si auto-infliggeva il 429.
+ * Gli endpoint che usiamo (v8 chart, v1 search) non richiedono crumb.
+ * Verifica empirica (luglio 2026): fetch "nuda" con solo UA → HTTP 200.
  *
- *  1. GET fc.yahoo.com → Yahoo risponde con `Set-Cookie` (A1/A3/B/...)
- *     che rappresenta il "consent" di cookies — anche se non c'è UI
- *     consent qui, Yahoo lo richiede tecnicamente.
- *  2. GET query2.finance.yahoo.com/v1/test/getcrumb con quel cookie
- *     → Yahoo risponde con una stringa "crumb" nel body (token CSRF-like).
- *  3. Per le successive chiamate API: usare il cookie come `Cookie:`
- *     header + aggiungere `&crumb=XYZ` come query param.
- *
- * Senza session Yahoo risponde sistematicamente 429 a fetch Node (anche
- * con tutti gli headers browser-like) — non è rate limit, è bot detection.
- * Curl da terminale funziona perché eredita cookies da chiamate precedenti
- * o ha un fingerprint TLS diverso whitelisted.
- *
- * Cache: 1h è abbondante, Yahoo non scade i cookie così rapidamente.
- */
-type YahooSession = { cookie: string; crumb: string; expiresAt: number };
-let cachedSession: YahooSession | null = null;
-const SESSION_TTL_MS = 60 * 60 * 1000; // 1 ora
-let sessionFetchPromise: Promise<YahooSession | null> | null = null;
-
-async function getYahooSession(): Promise<YahooSession | null> {
-  // Reuse cache se valida
-  if (cachedSession && cachedSession.expiresAt > Date.now()) {
-    return cachedSession;
-  }
-  // Evita race: se un fetch è già in corso, aspettiamo quello
-  if (sessionFetchPromise) return sessionFetchPromise;
-
-  sessionFetchPromise = (async () => {
-    try {
-      // Step 1: cookie consent da fc.yahoo.com
-      const cookieRes = await fetch("https://fc.yahoo.com/", {
-        cache: "no-store",
-        headers: YAHOO_HEADERS,
-        // Yahoo risponde 404 ma con `Set-Cookie`. Va bene così.
-        redirect: "manual",
-      });
-      const setCookie = cookieRes.headers.get("set-cookie");
-      console.log(
-        `[yahoo-session] fc.yahoo.com → HTTP ${cookieRes.status}, set-cookie ${
-          setCookie ? "presente (" + setCookie.length + " char)" : "MANCANTE"
-        }`,
-      );
-      if (!setCookie) return null;
-      // Estraggo la parte "name=value" dei cookie. Set-Cookie può contenere
-      // più cookie separati da virgola — fetch li concatena in una stringa
-      // unica. Splittiamo conservativi.
-      const cookieValue = setCookie
-        .split(",")
-        .map((c) => c.trim().split(";")[0])
-        .filter((c) => c.includes("="))
-        .join("; ");
-      console.log(
-        `[yahoo-session] cookie estratto: "${cookieValue.slice(0, 80)}${cookieValue.length > 80 ? "..." : ""}"`,
-      );
-      if (!cookieValue) return null;
-
-      // Step 2: crumb
-      const crumbRes = await fetch(
-        "https://query2.finance.yahoo.com/v1/test/getcrumb",
-        {
-          cache: "no-store",
-          headers: { ...YAHOO_HEADERS, Cookie: cookieValue },
-        },
-      );
-      console.log(
-        `[yahoo-session] getcrumb → HTTP ${crumbRes.status}`,
-      );
-      if (!crumbRes.ok) return null;
-      const crumb = (await crumbRes.text()).trim();
-      console.log(
-        `[yahoo-session] crumb ricevuto: "${crumb}" (length ${crumb.length})`,
-      );
-      if (!crumb || crumb.length > 50) return null; // sanity check
-
-      const session: YahooSession = {
-        cookie: cookieValue,
-        crumb,
-        expiresAt: Date.now() + SESSION_TTL_MS,
-      };
-      cachedSession = session;
-      return session;
-    } catch (e) {
-      console.error("[yahoo-session] errore:", e);
-      return null;
-    } finally {
-      sessionFetchPromise = null;
-    }
-  })();
-
-  return sessionFetchPromise;
-}
-
-/** Invalida la cache: chiamata se Yahoo restituisce 401/403/Unauthorized. */
-function invalidateYahooSession(): void {
-  cachedSession = null;
-}
-
-/**
- * Fetch verso Yahoo con session (cookie + crumb) e retry su 429.
- *
- * Strategia:
- *  - Pre-flight: ottieni session se non cached
- *  - Append `&crumb=XYZ` alla URL (se ha già `?`, append `&...`; altrimenti `?`)
- *  - Set `Cookie: A1=...; A3=...` header
- *  - Se 401/403 → invalida session e ritenta una volta
- *  - Se 429 → retry con backoff 1s, 2s (max 3 tentativi totali)
- *
- * Restituisce sempre la `Response` finale.
+ * Restituisce sempre la `Response` finale (il caller decide come gestirla).
  */
 async function yahooFetch(url: string): Promise<Response> {
   const maxAttempts = 3;
   let lastRes: Response | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const session = await getYahooSession();
-    const finalUrl = session
-      ? `${url}${url.includes("?") ? "&" : "?"}crumb=${encodeURIComponent(session.crumb)}`
-      : url;
-    const headers: Record<string, string> = { ...YAHOO_HEADERS };
-    if (session) headers.Cookie = session.cookie;
-
-    const res = await fetch(finalUrl, { cache: "no-store", headers });
-    console.log(
-      `[yahoo-fetch] attempt ${attempt}/${maxAttempts} session=${session ? "yes" : "NO"} → HTTP ${res.status} url=${finalUrl.slice(0, 100)}${finalUrl.length > 100 ? "..." : ""}`,
-    );
+    const res = await fetch(url, { cache: "no-store", headers: YAHOO_HEADERS });
     lastRes = res;
 
-    // Session scaduta? invalida e ritenta subito (non conta come retry 429).
-    if (res.status === 401 || res.status === 403) {
-      invalidateYahooSession();
-      if (attempt < maxAttempts) continue;
-      return res;
-    }
-    // Solo 429 è retry-able lato rate limit.
     if (res.status !== 429) return res;
     if (attempt === maxAttempts) return res;
-    // Backoff: 1s, poi 2s.
-    await new Promise((r) => setTimeout(r, 1000 * attempt));
+    // Backoff crescente: 700ms, poi 1400ms.
+    await new Promise((r) => setTimeout(r, 700 * attempt));
   }
   return lastRes as Response;
 }

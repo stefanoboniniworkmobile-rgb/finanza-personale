@@ -18,7 +18,6 @@ import {
   fetchMarketData,
   fetchStooq,
   fetchTwelveData,
-  fetchYahooBatchQuote,
   searchYahoo,
   suggestProvider,
   suggestProviderSymbol,
@@ -434,155 +433,31 @@ export async function refreshAllAssets(): Promise<
   const { holderId } = await requireHolder();
   const assets = await prisma.asset.findMany({
     where: { holderId, provider: { not: "manual" } },
-    select: {
-      id: true,
-      symbol: true,
-      name: true,
-      provider: true,
-      providerSymbol: true,
-      // Serve per mappare su Stooq quando il batch Yahoo va in rate limit.
-      assetClass: true,
-    },
+    select: { id: true, symbol: true, name: true },
+    orderBy: { symbol: "asc" },
   });
   let refreshed = 0;
   let errors = 0;
   const failures: RefreshFailure[] = [];
 
-  // ─── Asset Yahoo: 1 chiamata batch quote ────────────────────────────
-  const yahooAssets = assets.filter((a) => a.provider === "yahoo");
-  if (yahooAssets.length > 0) {
-    const symbols = yahooAssets.map((a) => a.providerSymbol);
-    const batch = await fetchYahooBatchQuote(symbols);
-    if (batch.ok) {
-      // Per ogni asset Yahoo, cerca la quote nel risultato. Se manca,
-      // significa che Yahoo non riconosce quel simbolo → errore per
-      // quell'asset specifico (gli altri vanno avanti).
-      const today = midnightUtcToday();
-      const upserts: Promise<unknown>[] = [];
-      for (const a of yahooAssets) {
-        const hit = batch.quotes.get(a.providerSymbol);
-        if (!hit) {
-          errors++;
-          failures.push({
-            id: a.id,
-            symbol: a.symbol,
-            name: a.name,
-            error: `Yahoo non ha restituito quote per "${a.providerSymbol}" (ticker non riconosciuto?)`,
-          });
-          continue;
-        }
-        upserts.push(
-          prisma.assetPrice.upsert({
-            where: { assetId_date: { assetId: a.id, date: today } },
-            update: { close: hit.price, source: "yahoo" },
-            create: {
-              assetId: a.id,
-              date: today,
-              close: hit.price,
-              source: "yahoo",
-            },
-          }),
-        );
-      }
-      // Eseguo tutti gli upsert in transazione: idempotente e veloce.
-      if (upserts.length > 0) {
-        await Promise.all(upserts);
-        refreshed += upserts.length;
-      }
-    } else {
-      // Batch fallito (es. 429 persistente, network, JSON malformato).
-      // Se l'errore è transitorio proviamo Stooq per ciascun asset (EOD,
-      // gratis, nessun rate limit): è lo stesso fallback che usa il refresh
-      // singolo, così "Aggiorna tutto" non lascia più asset indietro per un
-      // 429 di Yahoo. Solo se anche Stooq non copre l'asset lo segnaliamo
-      // come errore, mostrando l'ultimo prezzo noto quando disponibile.
-      const transient = shouldUseLastKnownPrice(batch.error);
-      const lastKnownByAsset = transient
-        ? new Map(
-            (
-              await prisma.assetPrice.findMany({
-                where: { assetId: { in: yahooAssets.map((a) => a.id) } },
-                orderBy: { date: "desc" },
-                distinct: ["assetId"],
-                select: { assetId: true, close: true, date: true },
-              })
-            ).map((p) => [p.assetId, { close: p.close, date: p.date }]),
-          )
-        : null;
-      const today = midnightUtcToday();
-
-      for (const a of yahooAssets) {
-        // Tentativo Stooq (solo su errore transitorio e se c'è un mapping).
-        const stooqSymbol = transient
-          ? yahooToStooqSymbol(a.providerSymbol, a.assetClass)
-          : null;
-        if (stooqSymbol) {
-          const stooqRes = await fetchStooq(
-            {
-              symbol: a.symbol,
-              provider: "stooq",
-              providerSymbol: stooqSymbol,
-              assetClass: a.assetClass as "stock",
-            },
-            { withHistory: true, historyDays: 60 },
-          );
-          if (stooqRes.ok) {
-            const points = stooqRes.history ?? [];
-            const allPoints =
-              points.length > 0
-                ? points
-                : [{ date: today, close: stooqRes.quote.price }];
-            await prisma.$transaction(
-              allPoints.map((p) =>
-                prisma.assetPrice.upsert({
-                  where: {
-                    assetId_date: {
-                      assetId: a.id,
-                      date: normalizeToUtcMidnight(p.date),
-                    },
-                  },
-                  update: { close: p.close, source: "stooq-fallback" },
-                  create: {
-                    assetId: a.id,
-                    date: normalizeToUtcMidnight(p.date),
-                    close: p.close,
-                    source: "stooq-fallback",
-                  },
-                }),
-              ),
-            );
-            refreshed++;
-            continue;
-          }
-        }
-
-        // Stooq non disponibile per questo asset → errore, con ultimo prezzo
-        // noto se ce l'abbiamo in DB.
-        errors++;
-        const lastKnown = lastKnownByAsset?.get(a.id);
-        failures.push({
-          id: a.id,
-          symbol: a.symbol,
-          name: a.name,
-          error: lastKnown
-            ? buildStalePriceMessage(batch.error, lastKnown)
-            : batch.error,
-        });
-      }
-    }
-  }
-
-  // ─── Asset di altri provider (ecb, ...): loop singolo ──────────────
-  const otherAssets = assets.filter((a) => a.provider !== "yahoo");
-  for (const a of otherAssets) {
+  // Refresh per-asset via l'endpoint chart v8 (dentro refreshAsset): porta
+  // anche lo storico per la sparkline. NON usiamo più il batch
+  // v7/finance/quote — da luglio 2026 risponde 401 Unauthorized. Una piccola
+  // pausa tra le chiamate tiene basso il rischio di 429 lato Yahoo.
+  for (const a of assets) {
     const r = await refreshAsset(a.id);
-    if (r.ok) refreshed++;
-    else {
+    if (r.ok) {
+      refreshed++;
+    } else {
       errors++;
-      failures.push({ id: a.id, symbol: a.symbol, name: a.name, error: r.error });
+      failures.push({
+        id: a.id,
+        symbol: a.symbol,
+        name: a.name,
+        error: r.error,
+      });
     }
-    // ECB è pubblico ufficiale e gentile, niente rate limit. Pausa minima.
-    await new Promise((res) => setTimeout(res, 100));
+    await new Promise((res) => setTimeout(res, 400));
   }
 
   revalidatePath("/mercati");

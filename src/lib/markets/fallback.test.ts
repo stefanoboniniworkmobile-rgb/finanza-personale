@@ -30,10 +30,10 @@ test("buildStalePriceMessage stays generic when no price is stored yet", () => {
   assert.doesNotMatch(msg, /\d{2}\/\d{2}\/\d{4}/);
 });
 
-test("suggestProvider prefers Stooq for equity-like assets", () => {
-  assert.equal(suggestProvider("stock"), "stooq");
-  assert.equal(suggestProvider("etf"), "stooq");
-  assert.equal(suggestProvider("index"), "stooq");
+test("suggestProvider defaults equity-like assets to Yahoo", () => {
+  assert.equal(suggestProvider("stock"), "yahoo");
+  assert.equal(suggestProvider("etf"), "yahoo");
+  assert.equal(suggestProvider("index"), "yahoo");
   assert.equal(suggestProvider("currency"), "ecb");
   assert.equal(suggestProvider("fund"), "manual");
 });
