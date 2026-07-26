@@ -10,6 +10,7 @@ import { CategoriesDonut } from "@/components/dashboard/CategoriesDonut";
 import { BudgetPanel } from "@/components/dashboard/BudgetPanel";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { PeriodSelector } from "@/components/dashboard/PeriodSelector";
+import { DashboardTabs } from "@/components/dashboard/DashboardTabs";
 
 type SearchParams = Promise<{
   period?: string;
@@ -75,32 +76,32 @@ export default async function DashboardPage(props: { searchParams: SearchParams 
 
       <KpiStrip data={data} />
 
-      <div className="grid grid-cols-12 gap-4 mb-4">
-        <div className="col-span-8">
-          <MonthlyTrendChart data={data.trend} />
-        </div>
-        <div className="col-span-4">
-          <CategoriesDonut
-            slices={data.topCategories}
-            totalUscite={data.kpi.uscitePeriod}
-            period={period}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-12 gap-4 mb-4">
-        <div className="col-span-7">
+      <DashboardTabs
+        panoramica={
+          <div className="grid grid-cols-12 gap-4">
+            <div className="col-span-8">
+              <MonthlyTrendChart data={data.trend} />
+            </div>
+            <div className="col-span-4">
+              <CategoriesDonut
+                slices={data.topCategories}
+                totalUscite={data.kpi.uscitePeriod}
+                period={period}
+              />
+            </div>
+          </div>
+        }
+        conti={
           <AccountsTable
             accounts={data.accounts}
             totalCount={data.kpi.movimentiTotal}
           />
-        </div>
-        <div className="col-span-5">
+        }
+        budget={
           <BudgetPanel rows={data.budgetRows} period={period} tab={budgetTab} />
-        </div>
-      </div>
-
-      <RecentTransactions rows={data.recent} />
+        }
+        movimenti={<RecentTransactions rows={data.recent} />}
+      />
     </div>
   );
 }
