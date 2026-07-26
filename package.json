@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "prezzi": "tsx scripts/aggiorna-prezzi.ts",
     "import:excel": "tsx scripts/import-excel.ts"
   },
   "dependencies": {
