@@ -440,6 +440,8 @@ export async function refreshAllAssets(): Promise<
       name: true,
       provider: true,
       providerSymbol: true,
+      // Serve per mappare su Stooq quando il batch Yahoo va in rate limit.
+      assetClass: true,
     },
   });
   let refreshed = 0;
@@ -489,13 +491,11 @@ export async function refreshAllAssets(): Promise<
       }
     } else {
       // Batch fallito (es. 429 persistente, network, JSON malformato).
-      // Tutti gli asset Yahoo falliscono in blocco col messaggio del batch.
-      // L'utente può cliccare "Riprova" sui singoli (refreshAsset usa
-      // l'endpoint chart, con cookie+crumb + fallback TwD se 429).
-      //
-      // Se l'errore è transitorio, allineiamo il messaggio a quello di
-      // refreshAsset: per ogni asset che ha già un prezzo in DB mostriamo
-      // valore + data dell'ultimo noto invece dell'errore grezzo del batch.
+      // Se l'errore è transitorio proviamo Stooq per ciascun asset (EOD,
+      // gratis, nessun rate limit): è lo stesso fallback che usa il refresh
+      // singolo, così "Aggiorna tutto" non lascia più asset indietro per un
+      // 429 di Yahoo. Solo se anche Stooq non copre l'asset lo segnaliamo
+      // come errore, mostrando l'ultimo prezzo noto quando disponibile.
       const transient = shouldUseLastKnownPrice(batch.error);
       const lastKnownByAsset = transient
         ? new Map(
@@ -509,8 +509,55 @@ export async function refreshAllAssets(): Promise<
             ).map((p) => [p.assetId, { close: p.close, date: p.date }]),
           )
         : null;
+      const today = midnightUtcToday();
 
       for (const a of yahooAssets) {
+        // Tentativo Stooq (solo su errore transitorio e se c'è un mapping).
+        const stooqSymbol = transient
+          ? yahooToStooqSymbol(a.providerSymbol, a.assetClass)
+          : null;
+        if (stooqSymbol) {
+          const stooqRes = await fetchStooq(
+            {
+              symbol: a.symbol,
+              provider: "stooq",
+              providerSymbol: stooqSymbol,
+              assetClass: a.assetClass as "stock",
+            },
+            { withHistory: true, historyDays: 60 },
+          );
+          if (stooqRes.ok) {
+            const points = stooqRes.history ?? [];
+            const allPoints =
+              points.length > 0
+                ? points
+                : [{ date: today, close: stooqRes.quote.price }];
+            await prisma.$transaction(
+              allPoints.map((p) =>
+                prisma.assetPrice.upsert({
+                  where: {
+                    assetId_date: {
+                      assetId: a.id,
+                      date: normalizeToUtcMidnight(p.date),
+                    },
+                  },
+                  update: { close: p.close, source: "stooq-fallback" },
+                  create: {
+                    assetId: a.id,
+                    date: normalizeToUtcMidnight(p.date),
+                    close: p.close,
+                    source: "stooq-fallback",
+                  },
+                }),
+              ),
+            );
+            refreshed++;
+            continue;
+          }
+        }
+
+        // Stooq non disponibile per questo asset → errore, con ultimo prezzo
+        // noto se ce l'abbiamo in DB.
         errors++;
         const lastKnown = lastKnownByAsset?.get(a.id);
         failures.push({
