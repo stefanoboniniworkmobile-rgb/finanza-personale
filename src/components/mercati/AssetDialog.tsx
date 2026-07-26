@@ -24,9 +24,11 @@ import {
   saveAsset,
   deleteAsset,
   setManualPrice,
+  resolveAssetByIsin,
   type AssetInput,
 } from "@/app/(app)/mercati/actions";
 import { NumberInput } from "@/components/ui/NumberInput";
+import type { IsinResolution } from "@/lib/markets/isin";
 
 export type AssetDialogValue = Partial<AssetInput> & {
   id?: string;
@@ -53,10 +55,10 @@ const ASSET_CLASS_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const PROVIDER_OPTIONS: { value: string; label: string; hint?: string }[] = [
-  { value: "stooq", label: "Stooq", hint: "Provider free/EOD affidabile per azioni e indici" },
+  { value: "yahoo", label: "Yahoo Finance", hint: "Azioni, ETF, indici, fondi (NAV) e crypto" },
   { value: "ecb", label: "BCE (ufficiale)", hint: "Solo cambi EUR/X e tassi BCE" },
-  { value: "yahoo", label: "Yahoo Finance", hint: "Legacy, più fragile con rate limit" },
-  { value: "manual", label: "Manuale", hint: "Tu inserisci il prezzo a mano (fondi italiani)" },
+  { value: "manual", label: "Manuale", hint: "Inserisci il prezzo a mano" },
+  { value: "stooq", label: "Stooq (deprecato)", hint: "Bloccato da anti-bot: non aggiorna più" },
 ];
 
 // Suggerimenti runtime (mirror lato client di suggestProvider/suggestProviderSymbol
@@ -65,7 +67,7 @@ const PROVIDER_OPTIONS: { value: string; label: string; hint?: string }[] = [
 function clientSuggestProvider(cls: string): string {
   if (cls === "currency" || cls === "rate") return "ecb";
   if (cls === "fund") return "manual";
-  return "stooq";
+  return "yahoo";
 }
 function clientSuggestProviderSymbol(symbol: string, provider: string): string {
   const s = symbol.trim();
@@ -99,13 +101,17 @@ export function AssetDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Risoluzione da ISIN: nome autorevole (OpenFIGI) + simbolo/prezzo (Yahoo)
+  // + confidenza. `resolution` è mostrata come anteprima con warning.
+  const [resolving, setResolving] = useState(false);
+  const [resolution, setResolution] = useState<IsinResolution | null>(null);
 
   const [symbol, setSymbol] = useState(initial?.symbol ?? "");
   const [isin, setIsin] = useState(initial?.isin ?? "");
   const [name, setName] = useState(initial?.name ?? "");
   const [assetClass, setAssetClass] = useState(initial?.assetClass ?? "stock");
   const [currency, setCurrency] = useState(initial?.currency ?? "EUR");
-  const [provider, setProvider] = useState(initial?.provider ?? "stooq");
+  const [provider, setProvider] = useState(initial?.provider ?? "yahoo");
   const [providerSymbol, setProviderSymbol] = useState(initial?.providerSymbol ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [initialPrice, setInitialPrice] = useState<number | null>(null);
@@ -118,12 +124,14 @@ export function AssetDialog({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setResolution(null);
+    setResolving(false);
     setSymbol(initial?.symbol ?? "");
     setIsin(initial?.isin ?? "");
     setName(initial?.name ?? "");
     setAssetClass(initial?.assetClass ?? "stock");
     setCurrency(initial?.currency ?? "EUR");
-    setProvider(initial?.provider ?? "stooq");
+    setProvider(initial?.provider ?? "yahoo");
     setProviderSymbol(initial?.providerSymbol ?? "");
     setNotes(initial?.notes ?? "");
     setInitialPrice(null);
@@ -156,6 +164,41 @@ export function AssetDialog({
   }, [open]);
 
   const isManualProvider = provider === "manual";
+
+  /**
+   * Risolve l'ISIN inserito: chiama OpenFIGI (nome) + Yahoo (simbolo/prezzo),
+   * pre-compila i campi e mostra il punteggio di confidenza. Non forza nulla:
+   * l'utente vede l'anteprima e può correggere prima di salvare.
+   */
+  const handleResolveIsin = async () => {
+    const code = isin.trim().toUpperCase();
+    if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(code)) {
+      setError("Inserisci un ISIN valido (12 caratteri).");
+      return;
+    }
+    setError(null);
+    setResolution(null);
+    setResolving(true);
+    const r = await resolveAssetByIsin(code);
+    setResolving(false);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    const res = r.data;
+    setResolution(res);
+    // Pre-compila coi dati risolti (l'utente può poi ritoccare).
+    if (res.figiName) setName(res.figiName);
+    if (res.yahoo) {
+      setSymbol(res.yahoo.symbol);
+      setAssetClass(res.yahoo.assetClass);
+      setProvider("yahoo");
+      setProviderTouched(true);
+      setProviderSymbol(res.yahoo.symbol);
+      setProviderSymbolTouched(true);
+    }
+    if (res.currency) setCurrency(res.currency);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,14 +345,28 @@ export function AssetDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="ISIN (opzionale)">
-              <input
-                type="text"
-                maxLength={12}
-                className="input w-full num-mono"
-                value={isin}
-                onChange={(e) => setIsin(e.target.value.toUpperCase())}
-                placeholder="Es. IT0003132476"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={12}
+                  className="input w-full num-mono"
+                  value={isin}
+                  onChange={(e) => setIsin(e.target.value.toUpperCase())}
+                  placeholder="Es. IT0003132476"
+                />
+                <button
+                  type="button"
+                  onClick={handleResolveIsin}
+                  disabled={resolving || isin.trim().length !== 12}
+                  className="btn-ghost !text-xs whitespace-nowrap"
+                  title="Cerca nome e prezzo partendo dall'ISIN"
+                >
+                  {resolving ? "…" : "Risolvi"}
+                </button>
+              </div>
+              <div className="text-[11px] text-sub mt-1">
+                Da ISIN: nome certo (Bloomberg) + prezzo (Yahoo)
+              </div>
             </Field>
             <Field label="Valuta">
               <input
@@ -322,6 +379,8 @@ export function AssetDialog({
               />
             </Field>
           </div>
+
+          {resolution && <IsinResolutionCard r={resolution} />}
 
           {/* Provider + ProviderSymbol */}
           <div className="rounded-md border border-line bg-bg/40 p-3 space-y-3">
@@ -457,6 +516,54 @@ export function AssetDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+/**
+ * Anteprima della risoluzione ISIN con badge di confidenza.
+ * alta = verde, media = ambra, bassa = rosso. Elenca i motivi del punteggio,
+ * e per media/bassa invita a verificare il prezzo/NAV prima di fidarsi.
+ */
+function IsinResolutionCard({ r }: { r: IsinResolution }) {
+  const c = r.confidence;
+  const tone =
+    c.level === "alta"
+      ? { box: "border-ok-100 bg-ok-50", chip: "border-ok-100 text-ok-600", label: "Alta" }
+      : c.level === "media"
+        ? { box: "border-warn-100 bg-warn-50", chip: "border-warn-100 text-warn-600", label: "Media" }
+        : { box: "border-err-100 bg-err-50", chip: "border-err-100 text-err-600", label: "Bassa" };
+
+  return (
+    <div className={`rounded-md border p-3 space-y-2 ${tone.box}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-sm font-medium leading-snug">
+          {r.figiName ?? "Nome non trovato su OpenFIGI"}
+        </div>
+        <span
+          className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-white ${tone.chip}`}
+        >
+          Confidenza {tone.label} · {c.percent}%
+        </span>
+      </div>
+
+      <div className="text-xs text-sub num-mono">
+        {r.yahoo
+          ? `${r.yahoo.symbol} · ${r.price != null ? r.price : "—"} ${r.currency ?? ""}`
+          : "Yahoo: nessun simbolo trovato per questo ISIN"}
+      </div>
+
+      <ul className="text-[11px] text-sub space-y-0.5 list-disc pl-4">
+        {c.reasons.map((x, i) => (
+          <li key={i}>{x}</li>
+        ))}
+      </ul>
+
+      {c.level !== "alta" && (
+        <div className={`text-[11px] font-medium ${tone.chip.split(" ")[1]}`}>
+          Verifica il prezzo/NAV su una fonte ufficiale prima di fidarti.
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -34,6 +34,7 @@ import {
   shouldUseLastKnownPrice,
   shouldUseStooqFallback,
 } from "@/lib/markets/fallback";
+import { resolveIsin, type IsinResolution } from "@/lib/markets/isin";
 
 const ASSET_CLASSES = [
   "stock",
@@ -480,6 +481,23 @@ export async function refreshAllAssets(): Promise<
  * Restituisce sempre `ok: true` con array (eventualmente vuoto), non solleva
  * errori per la UI: una ricerca fallita = lista vuota.
  */
+/**
+ * Risolve un ISIN in un asset pronto da aggiungere: nome autorevole da
+ * OpenFIGI (Bloomberg) + simbolo/prezzo da Yahoo + punteggio di confidenza
+ * (quanto è probabile che il simbolo Yahoo sia davvero quello strumento).
+ */
+export async function resolveAssetByIsin(
+  isin: string,
+): Promise<{ ok: true; data: IsinResolution } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Non autenticato" };
+  }
+  const r = await resolveIsin(isin);
+  if (!r) return { ok: false, error: "ISIN non valido (attesi 12 caratteri)" };
+  return { ok: true, data: r };
+}
+
 export async function searchAssets(
   query: string,
 ): Promise<{ ok: true; results: AssetSearchHit[] } | { ok: false; error: string }> {
