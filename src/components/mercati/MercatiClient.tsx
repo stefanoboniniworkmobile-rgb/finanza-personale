@@ -24,6 +24,7 @@ import {
   type RefreshFailure,
 } from "@/app/(app)/mercati/actions";
 import { fmtN } from "@/lib/format";
+import { quotePageLink } from "@/lib/asset-links";
 
 export type AssetRow = {
   id: string;
@@ -336,7 +337,9 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
                 </td>
               </tr>
             )}
-            {filteredRows.map((r) => (
+            {filteredRows.map((r) => {
+              const quoteLink = quotePageLink(r);
+              return (
               <tr
                 key={r.id}
                 className="row cursor-pointer"
@@ -385,9 +388,20 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
                   <Sparkline points={r.sparkPoints} />
                 </td>
                 <td
-                  className="text-right"
+                  className="text-right whitespace-nowrap"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {quoteLink && (
+                    <a
+                      href={quoteLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Vedi la quotazione su ${quoteLink.label}`}
+                      className="btn-ghost !h-7 !text-[11px] !px-2 mr-1 inline-block"
+                    >
+                      ↗
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => onRefreshOne(r.id)}
@@ -403,7 +417,8 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
