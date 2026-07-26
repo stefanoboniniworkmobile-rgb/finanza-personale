@@ -29,7 +29,11 @@ function appVersion(): string {
     count = 0;
   }
   const seq = String(Number.isFinite(count) ? count : 0).padStart(5, "0");
-  return `${yyyy}-${mm}-${seq}`;
+  const version = `${yyyy}-${mm}-${seq}`;
+  // Visibile nei log di build Vercel: se `count` resta basso e costante tra
+  // deploy, il clone è ancora shallow (serve `git fetch --unshallow`).
+  console.log(`[version] commit count = ${count} → ${version}`);
+  return version;
 }
 
 const nextConfig: NextConfig = {
