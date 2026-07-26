@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { getActiveHolder, listHolders } from "@/lib/holder";
 import { HolderSwitcher } from "@/components/layout/HolderSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { APP_VERSION, APP_CREDIT } from "@/lib/version";
 
 export default async function AppLayout({
   children,
@@ -84,6 +85,11 @@ export default async function AppLayout({
           <SidebarSection title={t("system")}>
             <NavLink href="/impostazioni" icon="⚙">{t("impostazioni")}</NavLink>
           </SidebarSection>
+
+          <div className="mt-6 px-2.5 text-[10px] leading-relaxed text-[var(--sub)]">
+            <div className="num-mono">v{APP_VERSION}</div>
+            <div>{APP_CREDIT}</div>
+          </div>
         </aside>
 
         <main className="flex-1 min-w-0 p-5">{children}</main>

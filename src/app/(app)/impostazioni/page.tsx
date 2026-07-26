@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { APP_VERSION, APP_CREDIT } from "@/lib/version";
 
 export default function ImpostazioniPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -43,8 +44,8 @@ export default function ImpostazioniPage() {
           Intestatari
         </div>
         <div className="text-sm mb-3">
-          Gestisci i perimetri di dati separati (es. Stefano, Lorenzo).
-          Ogni intestatario ha i propri conti, categorie, budget e movimenti.
+          Gestisci i perimetri di dati separati. Ogni intestatario ha i propri
+          conti, categorie, budget e movimenti.
         </div>
         <Link href="/impostazioni/intestatari" className="btn">
           Gestisci intestatari →
@@ -88,6 +89,10 @@ export default function ImpostazioniPage() {
           <li>Tailwind CSS</li>
           <li>Hosting Vercel</li>
         </ul>
+        <div className="mt-4 pt-3 border-t border-[var(--line)] text-xs text-[var(--sub)] flex items-center justify-between gap-2">
+          <span className="num-mono">Versione {APP_VERSION}</span>
+          <span>{APP_CREDIT}</span>
+        </div>
       </div>
     </div>
   );
