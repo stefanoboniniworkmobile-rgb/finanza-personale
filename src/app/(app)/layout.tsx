@@ -1,10 +1,11 @@
 import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getTranslations } from "next-intl/server";
+import { Euro, Settings } from "lucide-react";
 import { getActiveHolder, listHolders } from "@/lib/holder";
 import { HolderSwitcher } from "@/components/layout/HolderSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { SidebarNav } from "@/components/layout/SidebarNav";
 import { APP_VERSION, APP_CREDIT } from "@/lib/version";
 
 export default async function AppLayout({
@@ -14,7 +15,6 @@ export default async function AppLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const t = await getTranslations("nav");
   const initials = (session.user.email || "?")
     .split("@")[0]
     .slice(0, 2)
@@ -27,28 +27,35 @@ export default async function AppLayout({
   return (
     <div>
       {/* Top bar */}
-      <div className="border-b border-[var(--line)] bg-white sticky top-0 z-20">
-        <div className="px-4 py-2 flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 grid place-items-center text-white font-bold text-sm">
-              €
+      <header className="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-20">
+        <div className="h-[52px] px-4 flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2.5 shrink-0"
+          >
+            <div className="w-8 h-8 rounded-[9px] bg-ink grid place-items-center text-white shadow-sm">
+              <Euro size={17} strokeWidth={2.25} />
             </div>
-            <div className="font-semibold text-sm tracking-tight">Finanza Personale</div>
+            <span className="font-semibold text-[13.5px] tracking-tight text-ink">
+              Finanza&nbsp;Personale
+            </span>
           </Link>
-          <span className="text-[var(--sub)] text-xs select-none" aria-hidden>
-            /
-          </span>
+
+          <div className="w-px h-5 bg-line mx-1.5" aria-hidden />
+
           <HolderSwitcher
             holders={allHolders.map((h) => ({ id: h.id, name: h.name }))}
             activeId={activeHolder.id}
           />
+
           <div className="flex-1" />
-          <input
-            className="input w-72"
-            placeholder="Cerca movimenti, conti, categorie…"
-          />
-          <Link className="btn-ghost grid place-items-center" href="/impostazioni">
-            ⚙
+
+          <Link
+            href="/impostazioni"
+            aria-label="Impostazioni"
+            className="w-8 h-8 grid place-items-center rounded-lg text-sub hover:text-ink hover:bg-line2 transition-colors"
+          >
+            <Settings size={17} strokeWidth={1.75} />
           </Link>
           <UserMenu
             initials={initials}
@@ -60,77 +67,20 @@ export default async function AppLayout({
             }}
           />
         </div>
-      </div>
+      </header>
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-52 shrink-0 border-r border-[var(--line)] bg-white min-h-[calc(100vh-49px)] py-3 px-2">
-          <SidebarSection title={t("general")}>
-            <NavLink href="/dashboard" icon="▦">{t("dashboard")}</NavLink>
-            <NavLink href="/movimenti" icon="⇋">{t("movimenti")}</NavLink>
-            <NavLink href="/budget" icon="◫">{t("budget")}</NavLink>
-            <NavLink href="/forecast" icon="◢">{t("forecast")}</NavLink>
-            <NavLink href="/mercati" icon="◊">Mercati</NavLink>
-          </SidebarSection>
-          <SidebarSection title={t("anagrafiche")}>
-            <NavLink href="/conti" icon="▤">{t("conti")}</NavLink>
-            <NavLink href="/categorie" icon="▥">{t("categorie")}</NavLink>
-            <NavLink href="/modalita" icon="▪">{t("modalita")}</NavLink>
-          </SidebarSection>
-          <SidebarSection title="Strumenti">
-            <NavLink href="/importazioni" icon="↥">Importazioni</NavLink>
-            <NavLink href="/importazioni/templates" icon="◳">Template import</NavLink>
-            <NavLink href="/impostazioni/banche" icon="⇆">Banche</NavLink>
-          </SidebarSection>
-          <SidebarSection title={t("system")}>
-            <NavLink href="/impostazioni" icon="⚙">{t("impostazioni")}</NavLink>
-          </SidebarSection>
-
-          <div className="mt-6 px-2.5 text-[10px] leading-relaxed text-[var(--sub)]">
+        <aside className="w-56 shrink-0 border-r border-line bg-white min-h-[calc(100vh-52px)] sticky top-[52px] self-start flex flex-col">
+          <SidebarNav />
+          <div className="mt-auto px-4 py-3 border-t border-line text-[10px] leading-relaxed text-sub">
             <div className="num-mono">v{APP_VERSION}</div>
             <div>{APP_CREDIT}</div>
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 p-5">{children}</main>
+        <main className="flex-1 min-w-0 p-6">{children}</main>
       </div>
     </div>
-  );
-}
-
-function SidebarSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--sub)] px-2 mb-1 mt-2">
-        {title}
-      </div>
-      {children}
-    </>
-  );
-}
-
-function NavLink({
-  href,
-  icon,
-  children,
-}: {
-  href: string;
-  icon: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium text-[var(--ink2)] hover:bg-[var(--line2)] hover:text-[var(--ink)] transition"
-    >
-      <span className="w-4 opacity-70">{icon}</span>
-      <span>{children}</span>
-    </Link>
   );
 }
