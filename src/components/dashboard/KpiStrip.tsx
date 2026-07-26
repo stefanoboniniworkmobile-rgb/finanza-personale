@@ -1,103 +1,213 @@
 import Link from "next/link";
+import {
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  PiggyBank,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 import type { DashboardData } from "@/lib/dashboard";
 import { fmtEUR, fmtK, fmtN0 } from "@/lib/format";
 
+type Tone = "brand" | "ok" | "err";
+const BADGE: Record<Tone, string> = {
+  brand: "bg-brand-50 text-brand-600",
+  ok: "bg-ok-50 text-ok-600",
+  err: "bg-err-50 text-err-600",
+};
+
+type IconType = React.ComponentType<{ size?: number; strokeWidth?: number }>;
+
 export function KpiStrip({ data }: { data: DashboardData }) {
   const k = data.kpi;
-  const encodedPeriod = encodeURIComponent(data.period);
-  const tasso = k.entratePeriod > 0 ? Math.round((k.netto / k.entratePeriod) * 100) : 0;
-  const items: KpiItem[] = [
-    {
-      label: "Patrimonio totale",
-      value: fmtEUR(k.patrimonioTotal),
-      sub: `Liq ${fmtK(k.liquidity)} · Risp ${fmtK(k.savings)}`,
-      href: "/conti",
-    },
-    {
-      label: "Entrate",
-      value: fmtEUR(k.entratePeriod),
-      sub:
-        k.deltaEntrate === 0
-          ? "primo periodo"
-          : `${k.deltaEntrate >= 0 ? "▲" : "▼"} ${Math.abs(k.deltaEntrate).toFixed(1)}% vs mese prec.`,
-      cls: k.deltaEntrate >= 0 ? "delta-up" : "delta-down",
-      href: `/movimenti?period=${encodedPeriod}&tipo=income`,
-    },
-    {
-      label: "Uscite",
-      value: fmtEUR(k.uscitePeriod),
-      sub:
-        k.deltaUscite === 0
-          ? "primo periodo"
-          : `${k.deltaUscite <= 0 ? "▼" : "▲"} ${Math.abs(k.deltaUscite).toFixed(1)}% vs mese prec.`,
-      cls: k.deltaUscite > 0 ? "delta-down" : "delta-up",
-      href: `/movimenti?period=${encodedPeriod}&tipo=expense`,
-    },
-    {
-      label: "Netto",
-      value: (k.netto >= 0 ? "+" : "") + fmtEUR(k.netto),
-      sub: `${tasso}% tasso risparmio`,
-      cls: k.netto >= 0 ? "delta-up" : "delta-down",
-      href: `/movimenti?period=${encodedPeriod}`,
-    },
-    {
-      label: "Movimenti",
-      value: fmtN0(k.movimentiTotal),
-      sub: `${fmtN0(k.movimentiPeriod)} nel periodo`,
-      href: `/movimenti?period=${encodedPeriod}`,
-    },
-    {
-      label: "Escluse dalla dashboard",
-      value: fmtEUR(k.excludedBalancePeriod),
-      sub: "Saldo operazioni nascoste",
-      cls: k.excludedBalancePeriod < 0 ? "delta-down" : "delta-up",
-      href: `/movimenti?dashboard=excluded&period=${encodedPeriod}`,
-    },
-    {
-      label: "Esposizione carte",
-      value: fmtEUR(k.cardsExposure),
-      sub: "Da regolare a fine mese",
-      cls: k.cardsExposure < 0 ? "delta-down" : "",
-      href: "/conti?type=credit_card",
-    },
-    {
-      label: "Da verificare",
-      value: fmtN0(k.daVerificare),
-      sub: k.daVerificare === 0 ? "Tutto riconciliato" : "Movimenti non riconciliati",
-      cls: k.daVerificare > 0 ? "delta-down" : "delta-up",
-      href: `/movimenti?ric=0&period=${encodedPeriod}`,
-    },
-  ];
+  const p = encodeURIComponent(data.period);
+  const tasso =
+    k.entratePeriod > 0 ? Math.round((k.netto / k.entratePeriod) * 100) : 0;
 
   return (
-    <div className="panel grid grid-cols-7 mb-4 overflow-hidden">
-      {items.map((it, i) => {
-        const inner = (
-          <>
-            <div className="ph">{it.label}</div>
-            <div className="text-2xl font-semibold mt-1 num">{it.value}</div>
-            <div className={`text-[12px] text-sub mt-0.5 ${it.cls ?? ""}`}>{it.sub}</div>
-          </>
-        );
-        const cls = `px-4 py-3 ${i < items.length - 1 ? "border-r border-line2" : ""}`;
-        return it.href ? (
-          <Link key={it.label} href={it.href} className={`${cls} hover:bg-bg transition`}>
-            {inner}
-          </Link>
-        ) : (
-          <div key={it.label} className={cls}>
-            {inner}
+    <div className="mb-5 space-y-3">
+      {/* KPI principali */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <PrimaryCard
+          href="/conti"
+          icon={Wallet}
+          tone="brand"
+          label="Patrimonio totale"
+          value={fmtEUR(k.patrimonioTotal)}
+        >
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Chip>Liquidità {fmtK(k.liquidity)}</Chip>
+            <Chip>Risparmi {fmtK(k.savings)}</Chip>
           </div>
-        );
-      })}
+        </PrimaryCard>
+
+        <PrimaryCard
+          href={`/movimenti?period=${p}&tipo=income`}
+          icon={ArrowDownLeft}
+          tone="ok"
+          label="Entrate"
+          value={fmtEUR(k.entratePeriod)}
+        >
+          <Delta pct={k.deltaEntrate} goodWhenUp />
+        </PrimaryCard>
+
+        <PrimaryCard
+          href={`/movimenti?period=${p}&tipo=expense`}
+          icon={ArrowUpRight}
+          tone="err"
+          label="Uscite"
+          value={fmtEUR(k.uscitePeriod)}
+        >
+          <Delta pct={k.deltaUscite} goodWhenUp={false} />
+        </PrimaryCard>
+
+        <PrimaryCard
+          href={`/movimenti?period=${p}`}
+          icon={PiggyBank}
+          tone={k.netto >= 0 ? "ok" : "err"}
+          label="Netto del periodo"
+          value={(k.netto >= 0 ? "+" : "") + fmtEUR(k.netto)}
+        >
+          <SavingsRate pct={tasso} />
+        </PrimaryCard>
+      </div>
+
+      {/* Riepilogo secondario: una riga sottile, non una seconda fila di contatori */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1 text-[12px] text-sub">
+        <SummaryStat
+          href={`/movimenti?period=${p}`}
+          value={fmtN0(k.movimentiTotal)}
+          label={`movimenti · ${fmtN0(k.movimentiPeriod)} nel periodo`}
+        />
+        <Dot />
+        <SummaryStat
+          href="/conti?type=credit_card"
+          value={fmtEUR(k.cardsExposure)}
+          label="esposizione carte"
+          tone={k.cardsExposure < 0 ? "err" : undefined}
+        />
+        <Dot />
+        <SummaryStat
+          href={`/movimenti?ric=0&period=${p}`}
+          value={fmtN0(k.daVerificare)}
+          label={k.daVerificare === 0 ? "riconciliato" : "da verificare"}
+          tone={k.daVerificare > 0 ? "err" : "ok"}
+        />
+        <Dot />
+        <SummaryStat
+          href={`/movimenti?dashboard=excluded&period=${p}`}
+          value={fmtEUR(k.excludedBalancePeriod)}
+          label="escluse dalla dashboard"
+        />
+      </div>
     </div>
   );
 }
 
-type KpiItem = {
+function PrimaryCard({
+  href,
+  icon: Icon,
+  tone,
+  label,
+  value,
+  children,
+}: {
+  href: string;
+  icon: IconType;
+  tone: Tone;
   label: string;
   value: string;
-  sub: string;
-  cls?: string;
-  href?: string;
-};
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="panel p-4 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200"
+    >
+      <div className="flex items-center justify-between">
+        <span className="ph">{label}</span>
+        <span className={`w-8 h-8 rounded-lg grid place-items-center ${BADGE[tone]}`}>
+          <Icon size={16} strokeWidth={2} />
+        </span>
+      </div>
+      <div className="text-[26px] leading-none font-semibold num tracking-tight text-ink mt-3">
+        {value}
+      </div>
+      <div className="mt-2.5 min-h-[22px]">{children}</div>
+    </Link>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-md bg-line2 text-ink2 text-[11px] font-medium px-1.5 py-0.5 num">
+      {children}
+    </span>
+  );
+}
+
+function Delta({ pct, goodWhenUp }: { pct: number; goodWhenUp: boolean }) {
+  if (!pct) return <span className="text-[12px] text-sub">Primo periodo</span>;
+  const up = pct >= 0;
+  const good = goodWhenUp ? up : !up;
+  const Icon = up ? TrendingUp : TrendingDown;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[12px] font-medium ${
+        good ? "text-ok-600" : "text-err-600"
+      }`}
+    >
+      <Icon size={14} strokeWidth={2.25} />
+      {Math.abs(pct).toFixed(1)}%
+      <span className="text-sub font-normal">vs mese prec.</span>
+    </span>
+  );
+}
+
+function SavingsRate({ pct }: { pct: number }) {
+  const w = Math.max(0, Math.min(100, pct));
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[11px] mb-1">
+        <span className="text-sub">Tasso di risparmio</span>
+        <span className="font-semibold num text-ink">{pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-line2 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${pct >= 0 ? "bg-ok-500" : "bg-err-500"}`}
+          style={{ width: `${w}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SummaryStat({
+  href,
+  value,
+  label,
+  tone,
+}: {
+  href: string;
+  value: string;
+  label: string;
+  tone?: "ok" | "err";
+}) {
+  const valueCls =
+    tone === "err" ? "text-err-600" : tone === "ok" ? "text-ok-600" : "text-ink2";
+  return (
+    <Link href={href} className="hover:text-ink transition-colors">
+      <span className={`font-semibold num ${valueCls}`}>{value}</span>{" "}
+      {label}
+    </Link>
+  );
+}
+
+function Dot() {
+  return (
+    <span className="text-line select-none" aria-hidden>
+      ·
+    </span>
+  );
+}
