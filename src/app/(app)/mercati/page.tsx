@@ -19,6 +19,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getActiveHolder } from "@/lib/holder";
 import { MercatiClient, type AssetRow } from "@/components/mercati/MercatiClient";
+import { computeHolding } from "@/lib/markets/holdings";
 
 type SearchParams = Promise<{
   classe?: string; // filtro assetClass: "all" | "stock" | "etf" | ...
@@ -52,6 +53,17 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
         orderBy: { date: "asc" },
         select: { date: true, close: true },
       },
+      lots: {
+        orderBy: { date: "asc" },
+        select: {
+          id: true,
+          quantity: true,
+          price: true,
+          fee: true,
+          date: true,
+          note: true,
+        },
+      },
     },
     orderBy: [{ assetClass: "asc" }, { position: "asc" }, { symbol: "asc" }],
   });
@@ -78,6 +90,17 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
     // sparkline" 30gg da "history per metriche" 365gg).
     const changeYearPct: number | null = null;
 
+    const lastPrice = lastPoint?.close ?? null;
+    const holding = computeHolding(a.lots, lastPrice);
+    const lots = a.lots.map((l) => ({
+      id: l.id,
+      quantity: l.quantity,
+      price: l.price,
+      fee: l.fee,
+      date: l.date.toISOString().slice(0, 10),
+      note: l.note,
+    }));
+
     return {
       id: a.id,
       symbol: a.symbol,
@@ -88,15 +111,37 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
       provider: a.provider,
       providerSymbol: a.providerSymbol,
       notes: a.notes,
-      lastPrice: lastPoint?.close ?? null,
+      lastPrice,
       lastAsOf: lastPoint?.date ?? null,
       changeDayPct,
       changeWeekPct,
       changeMonthPct,
       changeYearPct,
       sparkPoints: pts.map((p) => ({ date: p.date, close: p.close })),
+      lots,
+      holding,
     };
   });
+
+  // Totale portafoglio per valuta (niente conversione FX: sommiamo per valuta).
+  const byCcy = new Map<string, { value: number; cost: number; pnl: number }>();
+  for (const r of rows) {
+    if (!r.holding || r.holding.value == null || r.holding.pnl == null) continue;
+    const t = byCcy.get(r.currency) ?? { value: 0, cost: 0, pnl: 0 };
+    t.value += r.holding.value;
+    t.cost += r.holding.cost;
+    t.pnl += r.holding.pnl;
+    byCcy.set(r.currency, t);
+  }
+  const portfolio = [...byCcy.entries()]
+    .map(([currency, t]) => ({
+      currency,
+      value: t.value,
+      cost: t.cost,
+      pnl: t.pnl,
+      pnlPct: t.cost !== 0 ? (t.pnl / t.cost) * 100 : null,
+    }))
+    .sort((a, b) => b.value - a.value);
 
   // Conteggi per la headline
   const counts = {
@@ -152,7 +197,7 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
         </a>
       </form>
 
-      <MercatiClient rows={rows} />
+      <MercatiClient rows={rows} portfolio={portfolio} />
 
       <div className="mt-4 panel p-4 text-xs text-sub leading-relaxed">
         <div className="font-medium text-ink mb-1">Come funziona</div>

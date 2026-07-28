@@ -25,6 +25,7 @@ import {
 } from "@/app/(app)/mercati/actions";
 import { fmtN } from "@/lib/format";
 import { quotePageLink } from "@/lib/asset-links";
+import type { Holding } from "@/lib/markets/holdings";
 
 export type AssetRow = {
   id: string;
@@ -43,6 +44,25 @@ export type AssetRow = {
   changeMonthPct: number | null;
   changeYearPct: number | null;
   sparkPoints: Array<{ date: string; close: number }>;
+  lots: Lot[];
+  holding: Holding | null;
+};
+
+export type Lot = {
+  id: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  date: string; // YYYY-MM-DD
+  note: string | null;
+};
+
+export type PortfolioTotal = {
+  currency: string;
+  value: number;
+  cost: number;
+  pnl: number;
+  pnlPct: number | null;
 };
 
 const CLASS_LABELS: Record<string, string> = {
@@ -57,7 +77,13 @@ const CLASS_LABELS: Record<string, string> = {
   other: "Altro",
 };
 
-export function MercatiClient({ rows }: { rows: AssetRow[] }) {
+export function MercatiClient({
+  rows,
+  portfolio,
+}: {
+  rows: AssetRow[];
+  portfolio: PortfolioTotal[];
+}) {
   const router = useRouter();
   // Dialog ricerca: il flow primario per aggiungere asset (cerca + filtri tipo).
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
@@ -123,6 +149,8 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
       provider: r.provider,
       providerSymbol: r.providerSymbol,
       notes: r.notes ?? "",
+      lots: r.lots,
+      lastPrice: r.lastPrice,
     });
     setDialogOpen(true);
   };
@@ -287,6 +315,54 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
         </div>
       )}
 
+      {portfolio.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {portfolio.map((t) => {
+            const cur = t.currency !== "%" ? t.currency : "";
+            const up = t.pnl >= 0;
+            return (
+              <div
+                key={t.currency}
+                className="panel p-4 flex flex-wrap items-center gap-x-8 gap-y-3"
+              >
+                <div className="min-w-[150px]">
+                  <div className="ph">
+                    Valore portafoglio
+                    {portfolio.length > 1 ? ` · ${t.currency}` : ""}
+                  </div>
+                  <div className="text-2xl font-semibold num tracking-tight text-ink mt-0.5">
+                    {fmtN(t.value)} {cur}
+                  </div>
+                </div>
+                <div>
+                  <div className="ph">Costo di carico</div>
+                  <div className="num text-ink2 mt-1">
+                    {fmtN(t.cost)} {cur}
+                  </div>
+                </div>
+                <div>
+                  <div className="ph">Guadagno / Perdita</div>
+                  <div
+                    className={`text-lg font-semibold num mt-0.5 ${
+                      up ? "text-ok-600" : "text-err-600"
+                    }`}
+                  >
+                    {up ? "+" : "−"}
+                    {fmtN(Math.abs(t.pnl))} {cur}
+                    {t.pnlPct != null && (
+                      <span className="text-sm ml-1">
+                        ({up ? "+" : ""}
+                        {t.pnlPct.toFixed(2)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="panel overflow-hidden">
         <table className="dense">
           <thead>
@@ -296,6 +372,13 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
               <th style={{ width: 90 }}>Classe</th>
               <th className="text-right" style={{ width: 110 }}>
                 Ultimo
+              </th>
+              <th
+                className="text-right"
+                style={{ width: 130 }}
+                title="Valore posseduto e guadagno/perdita potenziale"
+              >
+                Posizione
               </th>
               <th className="text-right" style={{ width: 80 }} title="Variazione vs giorno precedente">
                 Var giorno
@@ -317,14 +400,14 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-12 text-center text-sub">
+                <td colSpan={10} className="px-3 py-12 text-center text-sub">
                   Nessun asset nella watchlist. Aggiungine uno col bottone in alto.
                 </td>
               </tr>
             )}
             {rows.length > 0 && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-12 text-center text-sub">
+                <td colSpan={10} className="px-3 py-12 text-center text-sub">
                   Nessun asset corrisponde a &quot;{searchText}&quot;.
                   {" "}
                   <button
@@ -379,6 +462,41 @@ export function MercatiClient({ rows }: { rows: AssetRow[] }) {
                     </>
                   ) : (
                     <span className="text-sub">—</span>
+                  )}
+                </td>
+                <td
+                  className="text-right num-mono"
+                  title={
+                    r.holding
+                      ? `${fmtN(r.holding.quantity)} quote · prezzo medio ${fmtN(r.holding.avgPrice)} · costo ${fmtN(r.holding.cost)} ${r.currency}`
+                      : undefined
+                  }
+                >
+                  {r.holding ? (
+                    <>
+                      <div>
+                        {r.holding.value != null ? fmtN(r.holding.value) : "—"}
+                      </div>
+                      {r.holding.pnl != null && r.holding.pnlPct != null ? (
+                        <div
+                          className={`text-[10px] font-medium ${
+                            r.holding.pnl >= 0 ? "text-ok-600" : "text-err-600"
+                          }`}
+                        >
+                          {r.holding.pnl >= 0 ? "+" : "−"}
+                          {fmtN(Math.abs(r.holding.pnl))}
+                          {" · "}
+                          {r.holding.pnl >= 0 ? "+" : ""}
+                          {r.holding.pnlPct.toFixed(1)}%
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-sub">
+                          {fmtN(r.holding.quantity)} q.tà
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-sub text-xs">—</span>
                   )}
                 </td>
                 <ChangeCell pct={r.changeDayPct} />

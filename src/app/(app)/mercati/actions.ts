@@ -498,6 +498,59 @@ export async function resolveAssetByIsin(
   return { ok: true, data: r };
 }
 
+// ─── Lotti d'acquisto (portafoglio) ──────────────────────────────────────
+const lotInputSchema = z.object({
+  assetId: z.string().min(1),
+  quantity: z.coerce.number().positive().max(1_000_000_000_000),
+  price: z.coerce.number().min(0).max(1_000_000_000_000),
+  fee: z.coerce.number().min(0).max(1_000_000_000).default(0),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida"),
+  note: z.string().trim().max(200).nullable().optional(),
+});
+export type LotInput = z.input<typeof lotInputSchema>;
+
+/** Aggiunge un acquisto (lotto) a un asset dell'Holder attivo. */
+export async function addLot(raw: LotInput): Promise<ActionResult> {
+  const { holderId } = await requireHolder();
+  const parsed = lotInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dati non validi" };
+  }
+  const p = parsed.data;
+  const asset = await prisma.asset.findFirst({
+    where: { id: p.assetId, holderId },
+    select: { id: true },
+  });
+  if (!asset) return { ok: false, error: "Asset non trovato" };
+
+  await prisma.assetLot.create({
+    data: {
+      assetId: asset.id,
+      quantity: p.quantity,
+      price: p.price,
+      fee: p.fee,
+      date: new Date(p.date + "T00:00:00Z"),
+      note: p.note?.trim() ? p.note.trim() : null,
+    },
+  });
+  revalidatePath("/mercati");
+  return { ok: true, id: asset.id };
+}
+
+/** Elimina un acquisto (lotto). Verifica che appartenga all'Holder attivo. */
+export async function deleteLot(lotId: string): Promise<ActionResult> {
+  const { holderId } = await requireHolder();
+  const lot = await prisma.assetLot.findFirst({
+    where: { id: lotId, asset: { holderId } },
+    select: { id: true, assetId: true },
+  });
+  if (!lot) return { ok: false, error: "Acquisto non trovato" };
+
+  await prisma.assetLot.delete({ where: { id: lot.id } });
+  revalidatePath("/mercati");
+  return { ok: true, id: lot.assetId };
+}
+
 export async function searchAssets(
   query: string,
 ): Promise<{ ok: true; results: AssetSearchHit[] } | { ok: false; error: string }> {

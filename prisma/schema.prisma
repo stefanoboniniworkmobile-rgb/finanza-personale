@@ -697,9 +697,42 @@ model Asset {
 
   holder          Holder       @relation(fields: [holderId], references: [id], onDelete: Cascade)
   prices          AssetPrice[]
+  lots            AssetLot[]
 
   @@unique([holderId, symbol])
   @@index([holderId, assetClass])
+}
+
+// Acquisto (lotto) di un Asset: quantità comprata a un dato prezzo/data.
+// Più lotti per asset → prezzo medio di carico e guadagno/perdita potenziale.
+// Le vendite (P&L realizzato) non sono ancora modellate: si aggiungeranno
+// come lotti con quantità negativa o una tabella dedicata.
+model AssetLot {
+  id        String   @id @default(cuid())
+  assetId   String
+
+  // Quantità acquistata (numero di quote/azioni; può essere frazionaria).
+  quantity  Float
+
+  // Prezzo unitario di acquisto, nella valuta dell'Asset.
+  price     Float
+
+  // Commissioni/spese dell'operazione, nella valuta dell'Asset. Sommate al
+  // costo di carico per un G/P più realistico.
+  fee       Float    @default(0)
+
+  // Data dell'acquisto.
+  date      DateTime
+
+  // Nota libera (es. broker, motivazione).
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, date])
 }
 
 // Storico EOD dei prezzi di un Asset. Una riga = un giorno di quotazione.

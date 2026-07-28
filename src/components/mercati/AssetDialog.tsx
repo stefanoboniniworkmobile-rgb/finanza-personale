@@ -25,10 +25,23 @@ import {
   deleteAsset,
   setManualPrice,
   resolveAssetByIsin,
+  addLot,
+  deleteLot,
   type AssetInput,
 } from "@/app/(app)/mercati/actions";
 import { NumberInput } from "@/components/ui/NumberInput";
 import type { IsinResolution } from "@/lib/markets/isin";
+import { computeHolding } from "@/lib/markets/holdings";
+import { fmtN } from "@/lib/format";
+
+type LotView = {
+  id: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  date: string;
+  note: string | null;
+};
 
 export type AssetDialogValue = Partial<AssetInput> & {
   id?: string;
@@ -40,6 +53,8 @@ export type AssetDialogValue = Partial<AssetInput> & {
   provider?: string;
   providerSymbol?: string;
   notes?: string | null;
+  lots?: LotView[];
+  lastPrice?: number | null;
 };
 
 const ASSET_CLASS_OPTIONS: { value: string; label: string }[] = [
@@ -105,6 +120,13 @@ export function AssetDialog({
   // + confidenza. `resolution` è mostrata come anteprima con warning.
   const [resolving, setResolving] = useState(false);
   const [resolution, setResolution] = useState<IsinResolution | null>(null);
+  // Acquisti (lotti) per il calcolo del guadagno/perdita.
+  const [lots, setLots] = useState<LotView[]>(initial?.lots ?? []);
+  const [lotQty, setLotQty] = useState<number | null>(null);
+  const [lotPrice, setLotPrice] = useState<number | null>(null);
+  const [lotFee, setLotFee] = useState<number | null>(null);
+  const [lotDate, setLotDate] = useState("");
+  const [lotBusy, setLotBusy] = useState(false);
 
   const [symbol, setSymbol] = useState(initial?.symbol ?? "");
   const [isin, setIsin] = useState(initial?.isin ?? "");
@@ -126,6 +148,11 @@ export function AssetDialog({
     setError(null);
     setResolution(null);
     setResolving(false);
+    setLots(initial?.lots ?? []);
+    setLotQty(null);
+    setLotPrice(null);
+    setLotFee(null);
+    setLotDate("");
     setSymbol(initial?.symbol ?? "");
     setIsin(initial?.isin ?? "");
     setName(initial?.name ?? "");
@@ -268,6 +295,69 @@ export function AssetDialog({
     () => PROVIDER_OPTIONS.find((p) => p.value === provider)?.hint ?? "",
     [provider],
   );
+
+  const holdingSummary = useMemo(
+    () =>
+      computeHolding(
+        lots.map((l) => ({ quantity: l.quantity, price: l.price, fee: l.fee })),
+        initial?.lastPrice ?? null,
+      ),
+    [lots, initial?.lastPrice],
+  );
+
+  const addLotHandler = async () => {
+    if (!initial?.id) return;
+    if (!lotQty || lotQty <= 0 || lotPrice == null || lotPrice < 0 || !lotDate) {
+      setError("Inserisci quantità, prezzo e data dell'acquisto.");
+      return;
+    }
+    setError(null);
+    setLotBusy(true);
+    const res = await addLot({
+      assetId: initial.id,
+      quantity: lotQty,
+      price: lotPrice,
+      fee: lotFee ?? 0,
+      date: lotDate,
+    });
+    setLotBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    // Aggiorna subito la lista (ottimistico) + ricarica la tabella.
+    setLots((prev) =>
+      [
+        ...prev,
+        {
+          id: `tmp-${prev.length}-${lotDate}`,
+          quantity: lotQty,
+          price: lotPrice,
+          fee: lotFee ?? 0,
+          date: lotDate,
+          note: null,
+        },
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    setLotQty(null);
+    setLotPrice(null);
+    setLotFee(null);
+    setLotDate("");
+    router.refresh();
+  };
+
+  const deleteLotHandler = async (lotId: string) => {
+    const prev = lots;
+    setLots((p) => p.filter((l) => l.id !== lotId));
+    if (lotId.startsWith("tmp-")) return;
+    const res = await deleteLot(lotId);
+    if (!res.ok) {
+      setError(res.error);
+      setLots(prev);
+      return;
+    }
+    router.refresh();
+  };
 
   return (
     <dialog
@@ -466,6 +556,130 @@ export function AssetDialog({
                   : "Se inserito, verrà salvato come prezzo del giorno di creazione."}
               </div>
             </Field>
+          )}
+
+          {/* Acquisti (portafoglio) — solo in modifica (serve l'asset esistente) */}
+          {initial?.id && (
+            <div className="rounded-md border border-line p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-sub">
+                  Acquisti (portafoglio)
+                </div>
+                {holdingSummary && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] justify-end">
+                    <span className="text-sub">
+                      Qtà{" "}
+                      <b className="text-ink num">{fmtN(holdingSummary.quantity)}</b>
+                    </span>
+                    <span className="text-sub">
+                      Medio{" "}
+                      <b className="text-ink num">{fmtN(holdingSummary.avgPrice)}</b>
+                    </span>
+                    {holdingSummary.pnl != null && holdingSummary.pnlPct != null && (
+                      <span
+                        className={
+                          holdingSummary.pnl >= 0 ? "text-ok-600" : "text-err-600"
+                        }
+                      >
+                        <b className="num">
+                          {holdingSummary.pnl >= 0 ? "+" : "−"}
+                          {fmtN(Math.abs(holdingSummary.pnl))} (
+                          {holdingSummary.pnl >= 0 ? "+" : ""}
+                          {holdingSummary.pnlPct.toFixed(1)}%)
+                        </b>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {lots.length > 0 && (
+                <div className="space-y-1">
+                  {lots.map((l) => (
+                    <div
+                      key={l.id}
+                      className="flex items-center gap-2 text-xs num-mono"
+                    >
+                      <span className="w-16 text-right">{fmtN(l.quantity)}</span>
+                      <span className="text-sub">×</span>
+                      <span className="w-20 text-right">{fmtN(l.price)}</span>
+                      {l.fee > 0 && (
+                        <span className="text-sub text-[10px]">
+                          +{fmtN(l.fee)} comm.
+                        </span>
+                      )}
+                      <span className="text-sub ml-auto">{l.date}</span>
+                      <button
+                        type="button"
+                        onClick={() => deleteLotHandler(l.id)}
+                        aria-label="Elimina acquisto"
+                        className="text-err-600 hover:bg-err-50 rounded w-6 h-6 grid place-items-center leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+                <label className="block">
+                  <div className="text-[10px] uppercase tracking-wider text-sub font-semibold mb-1">
+                    Quantità
+                  </div>
+                  <NumberInput
+                    value={lotQty}
+                    onValueChange={setLotQty}
+                    min={0}
+                    className="input w-full text-right num-mono"
+                    placeholder="0"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-[10px] uppercase tracking-wider text-sub font-semibold mb-1">
+                    Prezzo
+                  </div>
+                  <NumberInput
+                    value={lotPrice}
+                    onValueChange={setLotPrice}
+                    min={0}
+                    className="input w-full text-right num-mono"
+                    placeholder="0,00"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-[10px] uppercase tracking-wider text-sub font-semibold mb-1">
+                    Commissioni
+                  </div>
+                  <NumberInput
+                    value={lotFee}
+                    onValueChange={setLotFee}
+                    min={0}
+                    className="input w-full text-right num-mono"
+                    placeholder="0,00"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-[10px] uppercase tracking-wider text-sub font-semibold mb-1">
+                    Data
+                  </div>
+                  <input
+                    type="date"
+                    value={lotDate}
+                    onChange={(e) => setLotDate(e.target.value)}
+                    className="input w-full"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={addLotHandler}
+                disabled={lotBusy}
+                className="btn-ghost !h-8 !text-xs"
+              >
+                {lotBusy ? "Aggiungo…" : "+ Aggiungi acquisto"}
+              </button>
+            </div>
           )}
 
           {/* Note */}
