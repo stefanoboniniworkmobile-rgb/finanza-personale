@@ -152,7 +152,9 @@ export function AssetDialog({
     setLotQty(null);
     setLotPrice(null);
     setLotFee(null);
-    setLotDate("");
+    // Precompila la data d'acquisto con oggi: campo obbligatorio, così non
+    // si dimentica (era la causa più probabile di "aggiunto ma non salvato").
+    setLotDate(new Date().toISOString().slice(0, 10));
     setSymbol(initial?.symbol ?? "");
     setIsin(initial?.isin ?? "");
     setName(initial?.name ?? "");
