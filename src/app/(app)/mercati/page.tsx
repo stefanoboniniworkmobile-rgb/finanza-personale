@@ -91,7 +91,16 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
     const changeYearPct: number | null = null;
 
     const lastPrice = lastPoint?.close ?? null;
-    const holding = computeHolding(a.lots, lastPrice);
+    const holding = computeHolding(
+      a.lots.map((l) => ({
+        quantity: l.quantity,
+        price: l.price,
+        fee: l.fee,
+        date: l.date,
+      })),
+      lastPrice,
+      now,
+    );
     const lots = a.lots.map((l) => ({
       id: l.id,
       quantity: l.quantity,

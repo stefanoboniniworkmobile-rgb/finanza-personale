@@ -31,7 +31,7 @@ import {
 } from "@/app/(app)/mercati/actions";
 import { NumberInput } from "@/components/ui/NumberInput";
 import type { IsinResolution } from "@/lib/markets/isin";
-import { computeHolding } from "@/lib/markets/holdings";
+import { computeHolding, formatHoldingPeriod } from "@/lib/markets/holdings";
 import { fmtN } from "@/lib/format";
 
 type LotView = {
@@ -301,7 +301,12 @@ export function AssetDialog({
   const holdingSummary = useMemo(
     () =>
       computeHolding(
-        lots.map((l) => ({ quantity: l.quantity, price: l.price, fee: l.fee })),
+        lots.map((l) => ({
+          quantity: l.quantity,
+          price: l.price,
+          fee: l.fee,
+          date: new Date(l.date + "T00:00:00Z"),
+        })),
         initial?.lastPrice ?? null,
       ),
     [lots, initial?.lastPrice],
@@ -563,37 +568,72 @@ export function AssetDialog({
           {/* Acquisti (portafoglio) — solo in modifica (serve l'asset esistente) */}
           {initial?.id && (
             <div className="rounded-md border border-line p-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-sub">
-                  Acquisti (portafoglio)
-                </div>
-                {holdingSummary && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] justify-end">
-                    <span className="text-sub">
-                      Qtà{" "}
-                      <b className="text-ink num">{fmtN(holdingSummary.quantity)}</b>
-                    </span>
-                    <span className="text-sub">
-                      Medio{" "}
-                      <b className="text-ink num">{fmtN(holdingSummary.avgPrice)}</b>
-                    </span>
-                    {holdingSummary.pnl != null && holdingSummary.pnlPct != null && (
-                      <span
-                        className={
-                          holdingSummary.pnl >= 0 ? "text-ok-600" : "text-err-600"
-                        }
-                      >
-                        <b className="num">
-                          {holdingSummary.pnl >= 0 ? "+" : "−"}
-                          {fmtN(Math.abs(holdingSummary.pnl))} (
-                          {holdingSummary.pnl >= 0 ? "+" : ""}
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-sub">
+                Acquisti (portafoglio)
+              </div>
+
+              {holdingSummary && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
+                  <div>
+                    <div className="text-[10px] text-sub uppercase tracking-wider">
+                      Costo medio di carico
+                    </div>
+                    <div className="num text-ink font-medium">
+                      {fmtN(holdingSummary.avgPrice)} {currency}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-sub uppercase tracking-wider">
+                      Valore · G/P
+                    </div>
+                    {holdingSummary.value != null &&
+                    holdingSummary.pnlPct != null ? (
+                      <div className="num">
+                        {fmtN(holdingSummary.value)}{" "}
+                        <span
+                          className={
+                            (holdingSummary.pnl ?? 0) >= 0
+                              ? "text-ok-600"
+                              : "text-err-600"
+                          }
+                        >
+                          ({(holdingSummary.pnl ?? 0) >= 0 ? "+" : ""}
                           {holdingSummary.pnlPct.toFixed(1)}%)
-                        </b>
-                      </span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-sub">— (nessun prezzo)</div>
                     )}
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="text-[10px] text-sub uppercase tracking-wider">
+                      Rend. medio annuo · giacenza
+                    </div>
+                    {holdingSummary.annualizedPct != null ? (
+                      <div className="num">
+                        <span
+                          className={
+                            holdingSummary.annualizedPct >= 0
+                              ? "text-ok-600 font-medium"
+                              : "text-err-600 font-medium"
+                          }
+                        >
+                          {holdingSummary.annualizedPct >= 0 ? "+" : ""}
+                          {holdingSummary.annualizedPct.toFixed(1)}%/anno
+                        </span>{" "}
+                        <span className="text-sub">
+                          · {formatHoldingPeriod(holdingSummary.avgHoldingDays)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-sub">
+                        {formatHoldingPeriod(holdingSummary.avgHoldingDays)} (troppo
+                        recente)
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {lots.length > 0 && (
                 <div className="space-y-1">

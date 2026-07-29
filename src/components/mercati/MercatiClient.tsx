@@ -25,7 +25,7 @@ import {
 } from "@/app/(app)/mercati/actions";
 import { fmtN } from "@/lib/format";
 import { quotePageLink } from "@/lib/asset-links";
-import type { Holding } from "@/lib/markets/holdings";
+import { formatHoldingPeriod, type Holding } from "@/lib/markets/holdings";
 
 export type AssetRow = {
   id: string;
@@ -380,6 +380,13 @@ export function MercatiClient({
               >
                 Posizione
               </th>
+              <th
+                className="text-right"
+                style={{ width: 120 }}
+                title="Costo medio di carico e rendimento medio annuo (XIRR)"
+              >
+                Rendimento
+              </th>
               <th className="text-right" style={{ width: 80 }} title="Variazione vs giorno precedente">
                 Var giorno
               </th>
@@ -400,14 +407,14 @@ export function MercatiClient({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-sub">
+                <td colSpan={11} className="px-3 py-12 text-center text-sub">
                   Nessun asset nella watchlist. Aggiungine uno col bottone in alto.
                 </td>
               </tr>
             )}
             {rows.length > 0 && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-sub">
+                <td colSpan={11} className="px-3 py-12 text-center text-sub">
                   Nessun asset corrisponde a &quot;{searchText}&quot;.
                   {" "}
                   <button
@@ -493,6 +500,41 @@ export function MercatiClient({
                         <div className="text-[10px] text-sub">
                           {fmtN(r.holding.quantity)} q.tà
                         </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-sub text-xs">—</span>
+                  )}
+                </td>
+                <td
+                  className="text-right num-mono"
+                  title={
+                    r.holding
+                      ? `Costo medio ${fmtN(r.holding.avgPrice)} ${r.currency} · giacenza media ${formatHoldingPeriod(r.holding.avgHoldingDays)}`
+                      : undefined
+                  }
+                >
+                  {r.holding ? (
+                    <>
+                      <div className="text-[11px] text-sub">
+                        med. {fmtN(r.holding.avgPrice)}
+                      </div>
+                      {r.holding.annualizedPct != null ? (
+                        <div
+                          className={`font-medium ${
+                            r.holding.annualizedPct >= 0
+                              ? "text-ok-600"
+                              : "text-err-600"
+                          }`}
+                        >
+                          {r.holding.annualizedPct >= 0 ? "+" : ""}
+                          {r.holding.annualizedPct.toFixed(1)}%
+                          <span className="text-[9px] text-sub font-normal">
+                            /anno
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-sub">—</div>
                       )}
                     </>
                   ) : (
