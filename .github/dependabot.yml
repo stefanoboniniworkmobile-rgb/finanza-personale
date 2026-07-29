@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Aggiornamenti settimanali delle dipendenze npm + security update automatici.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Raggruppa gli aggiornamenti minori/patch in una sola PR per ridurre il rumore.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
