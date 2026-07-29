@@ -19,7 +19,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getActiveHolder } from "@/lib/holder";
 import { MercatiClient, type AssetRow } from "@/components/mercati/MercatiClient";
-import { computeHolding } from "@/lib/markets/holdings";
+import {
+  computeHolding,
+  computeAnnualizedReturn,
+} from "@/lib/markets/holdings";
 
 type SearchParams = Promise<{
   classe?: string; // filtro assetClass: "all" | "stock" | "etf" | ...
@@ -133,14 +136,40 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
   });
 
   // Totale portafoglio per valuta (niente conversione FX: sommiamo per valuta).
-  const byCcy = new Map<string, { value: number; cost: number; pnl: number }>();
-  for (const r of rows) {
-    if (!r.holding || r.holding.value == null || r.holding.pnl == null) continue;
-    const t = byCcy.get(r.currency) ?? { value: 0, cost: 0, pnl: 0 };
-    t.value += r.holding.value;
-    t.cost += r.holding.cost;
-    t.pnl += r.holding.pnl;
-    byCcy.set(r.currency, t);
+  // Raccogliamo anche TUTTI i lotti della valuta per l'XIRR complessivo.
+  type LotDate = { quantity: number; price: number; fee: number; date: Date };
+  const byCcy = new Map<
+    string,
+    { value: number; cost: number; pnl: number; lots: LotDate[] }
+  >();
+  for (const a of assets) {
+    const lastClose = a.prices.length
+      ? a.prices[a.prices.length - 1].close
+      : null;
+    const h = computeHolding(
+      a.lots.map((l) => ({
+        quantity: l.quantity,
+        price: l.price,
+        fee: l.fee,
+        date: l.date,
+      })),
+      lastClose,
+      now,
+    );
+    if (!h || h.value == null || h.pnl == null) continue;
+    const t = byCcy.get(a.currency) ?? { value: 0, cost: 0, pnl: 0, lots: [] };
+    t.value += h.value;
+    t.cost += h.cost;
+    t.pnl += h.pnl;
+    for (const l of a.lots) {
+      t.lots.push({
+        quantity: l.quantity,
+        price: l.price,
+        fee: l.fee,
+        date: l.date,
+      });
+    }
+    byCcy.set(a.currency, t);
   }
   const portfolio = [...byCcy.entries()]
     .map(([currency, t]) => ({
@@ -149,6 +178,7 @@ export default async function MercatiPage(props: { searchParams: SearchParams })
       cost: t.cost,
       pnl: t.pnl,
       pnlPct: t.cost !== 0 ? (t.pnl / t.cost) * 100 : null,
+      annualizedPct: computeAnnualizedReturn(t.lots, t.value, now),
     }))
     .sort((a, b) => b.value - a.value);
 

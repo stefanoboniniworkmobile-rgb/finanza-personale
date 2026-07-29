@@ -136,6 +136,40 @@ export function computeHolding(
   };
 }
 
+/**
+ * Rendimento medio annuo di un insieme di acquisti (portafoglio o singolo
+ * asset): XIRR su tutti i lotti (uscite alle loro date) + il valore attuale
+ * complessivo (entrata oggi). Ritorna la % annua, o null se non calcolabile
+ * (nessun valore, costo ≤ 0, o giacenza media < 14 giorni).
+ */
+export function computeAnnualizedReturn(
+  lots: LotInput[],
+  totalValue: number | null,
+  now: Date = new Date(),
+): number | null {
+  if (lots.length === 0 || totalValue == null) return null;
+
+  let weightedDays = 0;
+  let weightTotal = 0;
+  for (const l of lots) {
+    const lotCost = l.quantity * l.price + (l.fee || 0);
+    const days = Math.max(0, (now.getTime() - l.date.getTime()) / MS_PER_DAY);
+    weightedDays += lotCost * days;
+    weightTotal += lotCost;
+  }
+  if (weightTotal <= 0) return null;
+  const avgDays = weightedDays / weightTotal;
+  if (avgDays < 14) return null;
+
+  const cashflows = lots.map((l) => ({
+    amount: -(l.quantity * l.price + (l.fee || 0)),
+    date: l.date,
+  }));
+  cashflows.push({ amount: totalValue, date: now });
+  const r = xirr(cashflows);
+  return r != null && Number.isFinite(r) ? r * 100 : null;
+}
+
 /** Formatta una giacenza in giorni in etichetta breve ("18 gg", "7 mesi", "2a 3m"). */
 export function formatHoldingPeriod(days: number | null): string {
   if (days == null || days <= 0) return "—";

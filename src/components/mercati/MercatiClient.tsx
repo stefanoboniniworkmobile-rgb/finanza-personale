@@ -63,6 +63,7 @@ export type PortfolioTotal = {
   cost: number;
   pnl: number;
   pnlPct: number | null;
+  annualizedPct: number | null;
 };
 
 const CLASS_LABELS: Record<string, string> = {
@@ -357,6 +358,22 @@ export function MercatiClient({
                     )}
                   </div>
                 </div>
+                {t.annualizedPct != null && (
+                  <div>
+                    <div className="ph">Rendimento medio annuo</div>
+                    <div
+                      className={`text-lg font-semibold num mt-0.5 ${
+                        t.annualizedPct >= 0 ? "text-ok-600" : "text-err-600"
+                      }`}
+                    >
+                      {t.annualizedPct >= 0 ? "+" : ""}
+                      {t.annualizedPct.toFixed(2)}%
+                      <span className="text-sm text-sub font-normal ml-0.5">
+                        /anno
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
