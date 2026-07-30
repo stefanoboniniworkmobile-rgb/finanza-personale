@@ -1,11 +1,30 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getLocale } from "next-intl/server";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Finanza Personale",
-  description: "Gestione spese personali",
+  description: "Il tuo budget e i tuoi investimenti, sempre sotto controllo.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Finanza",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a2540",
+  width: "device-width",
+  initialScale: 1,
+  // Impedisce lo zoom "a scatti" e migliora la resa app-like su iOS.
+  maximumScale: 1,
 };
 
 export default async function RootLayout({
@@ -27,6 +46,7 @@ export default async function RootLayout({
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
         </NextIntlClientProvider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
