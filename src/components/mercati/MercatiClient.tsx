@@ -452,7 +452,7 @@ export function MercatiClient({
                 className="row cursor-pointer"
                 onClick={() => openEdit(r)}
               >
-                <td className="font-medium num-mono">
+                <td className="font-medium num-mono" data-label="Symbol">
                   {r.symbol}
                   {r.provider === "manual" && (
                     <span
@@ -463,7 +463,7 @@ export function MercatiClient({
                     </span>
                   )}
                 </td>
-                <td>
+                <td data-label="Nome">
                   <div className="leading-snug">{r.name}</div>
                   {r.isin && (
                     <div className="text-[10px] text-sub num-mono" title="ISIN">
@@ -471,12 +471,12 @@ export function MercatiClient({
                     </div>
                   )}
                 </td>
-                <td>
+                <td data-label="Classe">
                   <span className="pill bg-line2 text-ink2">
                     {CLASS_LABELS[r.assetClass] ?? r.assetClass}
                   </span>
                 </td>
-                <td className="text-right num-mono">
+                <td className="text-right num-mono" data-label="Ultimo">
                   {r.lastPrice != null ? (
                     <>
                       {fmtN(r.lastPrice)} {r.currency !== "%" ? r.currency : "%"}
@@ -490,6 +490,7 @@ export function MercatiClient({
                 </td>
                 <td
                   className="text-right num-mono"
+                  data-label="Posizione"
                   title={
                     r.holding
                       ? `${fmtN(r.holding.quantity)} quote · prezzo medio ${fmtN(r.holding.avgPrice)} · costo ${fmtN(r.holding.cost)} ${r.currency}`
@@ -525,6 +526,7 @@ export function MercatiClient({
                 </td>
                 <td
                   className="text-right num-mono"
+                  data-label="Rendimento"
                   title={
                     r.holding
                       ? `Costo medio ${fmtN(r.holding.avgPrice)} ${r.currency} · giacenza media ${formatHoldingPeriod(r.holding.avgHoldingDays)}`
@@ -558,10 +560,10 @@ export function MercatiClient({
                     <span className="text-sub text-xs">—</span>
                   )}
                 </td>
-                <ChangeCell pct={r.changeDayPct} />
-                <ChangeCell pct={r.changeWeekPct} />
-                <ChangeCell pct={r.changeMonthPct} />
-                <td>
+                <ChangeCell pct={r.changeDayPct} label="Var giorno" />
+                <ChangeCell pct={r.changeWeekPct} label="Var 7g" />
+                <ChangeCell pct={r.changeMonthPct} label="Var 30g" />
+                <td data-label="Andamento">
                   <Sparkline points={r.sparkPoints} />
                 </td>
                 <td
@@ -615,9 +617,13 @@ export function MercatiClient({
   );
 }
 
-function ChangeCell({ pct }: { pct: number | null }) {
+function ChangeCell({ pct, label }: { pct: number | null; label?: string }) {
   if (pct == null) {
-    return <td className="text-right num-mono text-sub">—</td>;
+    return (
+      <td data-label={label} className="text-right num-mono text-sub">
+        —
+      </td>
+    );
   }
   const sign = pct > 0 ? "+" : "";
   const cls =
@@ -627,7 +633,7 @@ function ChangeCell({ pct }: { pct: number | null }) {
         ? "text-err-600"
         : "text-sub";
   return (
-    <td className={`text-right num-mono font-medium ${cls}`}>
+    <td data-label={label} className={`text-right num-mono font-medium ${cls}`}>
       {sign}
       {pct.toFixed(2)}%
     </td>

@@ -95,6 +95,60 @@ table.dense tbody tr:last-child td {
 table.dense tbody tr.row:hover {
   background: var(--bg);
 }
+
+/* ---- MOBILE: le tabelle dense diventano schede (niente scroll orizzontale) ----
+ * Sotto i 640px ogni riga è una card e le celle vanno a capo. Le celle con
+ * attributo `data-label` mostrano l'etichetta a sinistra e il valore a destra;
+ * quelle senza si impilano a sinistra. Il desktop resta tabella. */
+@media (max-width: 640px) {
+  table.dense,
+  table.dense tbody,
+  table.dense tr,
+  table.dense td {
+    display: block;
+    width: 100%;
+  }
+  table.dense thead {
+    display: none;
+  }
+  table.dense tbody tr,
+  table.dense tbody tr.row {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 4px 2px;
+    background: #fff;
+  }
+  table.dense td {
+    border: none !important;
+    padding: 5px 12px !important;
+    text-align: left !important;
+    font-size: 13px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* celle "etichettate": etichetta piccola sopra, valore sotto (natura
+   * multi-riga preservata). */
+  table.dense td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--sub);
+  }
+  /* celle vuote (azioni senza contenuto, spaziatori) sparite */
+  table.dense td:empty {
+    display: none;
+  }
+  table.dense tfoot,
+  table.dense tfoot td {
+    display: block;
+    width: 100%;
+  }
+}
 table.dense tfoot td {
   border-top: 1px solid var(--line);
   border-bottom: none;
