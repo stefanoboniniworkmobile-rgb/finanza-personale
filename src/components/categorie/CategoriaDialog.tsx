@@ -195,7 +195,7 @@ export function CategoriaDialog({
           </Field>
 
           {/* Show in dashboard + has budget */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ToggleRow
               checked={showInDashboard}
               onChange={setShowInDashboard}

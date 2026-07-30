@@ -353,7 +353,7 @@ export function MovimentoDialog({
           </div>
 
           {/* Data + Importo */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Data">
               <input
                 type="date"
@@ -389,7 +389,7 @@ export function MovimentoDialog({
           </Field>
 
           {/* Categoria + Conto */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={`Categoria (${type === "income" ? "entrata" : "uscita"})`}>
               <select
                 required

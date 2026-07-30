@@ -120,7 +120,7 @@ export function TemplateForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Intestazione: identità del template */}
       <Section title="Identità" hint="Come chiami questo template e da dove arriva.">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Nome">
             <input
               type="text"
@@ -147,7 +147,7 @@ export function TemplateForm({
 
       {/* Parsing */}
       <Section title="Lettura file" hint="Come è fatto il file in input.">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Tipo file">
             <select
               className="input w-full"
@@ -171,7 +171,7 @@ export function TemplateForm({
         </div>
 
         {fileType === "csv" ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Delimitatore">
               <select
                 className="input w-full"
@@ -210,7 +210,7 @@ export function TemplateForm({
             </Field>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nome foglio (opzionale)">
               <input
                 type="text"
@@ -236,7 +236,7 @@ export function TemplateForm({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Separatore decimale negli importi">
             <select
               className="input w-full"
@@ -267,7 +267,7 @@ export function TemplateForm({
         title="Colonne obbligatorie"
         hint="Indica i nomi delle intestazioni così come sono scritte nel file (case-insensitive)."
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Data">
             <input
               type="text"
@@ -327,7 +327,7 @@ export function TemplateForm({
           </Field>
         )}
         {signMode === "DEBIT_CREDIT" && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Colonna Dare (uscite)">
               <input
                 type="text"
@@ -362,7 +362,7 @@ export function TemplateForm({
                 placeholder="Es. Importo"
               />
             </Field>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Colonna tipo">
                 <input
                   type="text"
@@ -438,7 +438,7 @@ export function TemplateForm({
         title="Mappatura entità (opzionale)"
         hint="Indica le colonne del file che contengono Conto, Categoria e Modalità di pagamento. Le equivalenze testo → entità app le configuri nella sezione Mapping di questo template."
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Colonna conto">
             <input
               type="text"
@@ -480,7 +480,7 @@ export function TemplateForm({
         title="Valori di default"
         hint="Usati quando la colonna corrispondente è vuota o nessun mapping ha trovato match. Il conto è sempre richiesto."
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Conto di default">
             <select
               className="input w-full"

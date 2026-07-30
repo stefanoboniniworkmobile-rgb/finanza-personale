@@ -446,7 +446,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
       </form>
 
       {/* Riassunto aggregato sul set filtrato (intero, non solo pagina corrente) */}
-      <div className="panel grid grid-cols-4 mb-3 overflow-hidden">
+      <div className="panel grid grid-cols-2 sm:grid-cols-4 mb-3 overflow-hidden">
         <SummaryCell
           label="Movimenti filtrati"
           value={fmtN0(total)}

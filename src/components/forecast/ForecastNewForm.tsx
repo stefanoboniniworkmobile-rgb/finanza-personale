@@ -154,7 +154,7 @@ export function ForecastNewForm({
           </button>
         </div>
 
-        <div className="grid grid-cols-6 gap-1.5">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
           {MONTHS_LABEL.map((label, i) => {
             const m = i + 1;
             const checked = actualMonths.has(m);

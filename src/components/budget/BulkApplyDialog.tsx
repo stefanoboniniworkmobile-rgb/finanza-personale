@@ -219,7 +219,7 @@ export function BulkApplyDialog({
                 {monthCount}/{editableMonths.length}
               </span>
             </div>
-            <div className="grid grid-cols-6 gap-1.5 mb-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-2">
               {monthLabels.map((label, i) => {
                 const m = i + 1;
                 const checked = selectedMonths.has(m);

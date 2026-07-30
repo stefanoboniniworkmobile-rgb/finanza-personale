@@ -400,7 +400,7 @@ export function AssetDialog({
 
         <div className="p-5 space-y-4">
           {/* Symbol + Classe */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Symbol (label)">
               <input
                 type="text"
@@ -440,7 +440,7 @@ export function AssetDialog({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="ISIN (opzionale)">
               <div className="flex gap-2">
                 <input
@@ -484,7 +484,7 @@ export function AssetDialog({
             <div className="text-[11px] font-semibold uppercase tracking-wider text-sub">
               Sorgente dati
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Provider">
                 <select
                   className="input w-full"

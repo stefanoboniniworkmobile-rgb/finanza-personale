@@ -446,7 +446,7 @@ export function ImportFlow({
   // ====================== STEP 2: PREVIEW ======================
   return (
     <div className="space-y-4">
-      <div className="panel grid grid-cols-7 overflow-hidden">
+      <div className="panel grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 overflow-hidden">
         <StatCell label="Totale righe" value={counts.total} />
         <StatCell label="Pronte" value={counts.ready} color="text-ok-600" />
         <StatCell label="Da completare" value={counts.needs} color="text-amber-600" />

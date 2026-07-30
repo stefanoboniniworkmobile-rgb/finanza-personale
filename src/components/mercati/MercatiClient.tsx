@@ -225,7 +225,7 @@ export function MercatiClient({
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             placeholder="Cerca per nome, symbol o ISIN…"
-            className="input !h-8 !py-0 w-72"
+            className="input !h-8 !py-0 w-full sm:w-72"
           />
           {searchText && (
             <button
