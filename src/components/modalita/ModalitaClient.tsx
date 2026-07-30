@@ -34,7 +34,7 @@ export function ModalitaClient({ rows }: { rows: ModalitaRow[] }) {
         </button>
       </div>
 
-      <div className="panel overflow-hidden">
+      <div className="panel overflow-x-auto">
         <table className="dense">
           <thead>
             <tr>

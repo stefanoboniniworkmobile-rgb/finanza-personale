@@ -63,7 +63,7 @@ export default async function ForecastListPage() {
           .
         </div>
       ) : (
-        <div className="panel overflow-hidden">
+        <div className="panel overflow-x-auto">
           <table className="dense">
             <thead>
               <tr>

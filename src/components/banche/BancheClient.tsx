@@ -296,7 +296,7 @@ export function BancheClient({
         </div>
       )}
 
-      <div className="panel overflow-hidden">
+      <div className="panel overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[var(--line2)] text-xs uppercase text-sub">
             <tr>

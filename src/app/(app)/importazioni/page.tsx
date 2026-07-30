@@ -58,7 +58,7 @@ export default async function ImportazioniPage() {
       <HashDiagnostics totalTransactions={totalTransactions} withHash={withHash} />
 
 
-      <div className="panel overflow-hidden">
+      <div className="panel overflow-x-auto">
         <div className="px-4 py-3 border-b border-line2 text-xs uppercase tracking-wider text-sub font-semibold">
           Storico import
         </div>

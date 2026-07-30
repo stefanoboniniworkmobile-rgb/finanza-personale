@@ -47,7 +47,7 @@ export default async function ImportTemplatesPage() {
           </Link>
         </div>
       ) : (
-        <div className="panel overflow-hidden">
+        <div className="panel overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-bg border-b border-line">
               <tr className="text-left text-xs uppercase tracking-wider text-sub">
