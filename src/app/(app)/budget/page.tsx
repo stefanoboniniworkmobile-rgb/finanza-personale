@@ -7,6 +7,7 @@ import {
   BudgetGridClient,
   type BudgetGridRow,
 } from "@/components/budget/BudgetGridClient";
+import { BudgetMobile } from "@/components/budget/BudgetMobile";
 import { ClearYearButton } from "@/components/budget/ClearYearButton";
 
 type SearchParams = Promise<{
@@ -226,7 +227,17 @@ export default async function BudgetPage(props: { searchParams: SearchParams }) 
         </a>
       </form>
 
-      <BudgetGridClient
+      {/* Desktop: griglia completa. Mobile: lista categorie col totale annuo
+          + editor mese per mese (le griglie larghe non vanno su cellulare). */}
+      <div className="hidden md:block">
+        <BudgetGridClient
+          year={year}
+          monthLabels={MONTHS_LABEL}
+          rows={rows}
+          totals={totals}
+        />
+      </div>
+      <BudgetMobile
         year={year}
         monthLabels={MONTHS_LABEL}
         rows={rows}
