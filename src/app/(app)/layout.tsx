@@ -7,6 +7,7 @@ import { HolderSwitcher } from "@/components/layout/HolderSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { APP_VERSION, APP_CREDIT } from "@/lib/version";
 
 export default async function AppLayout({
@@ -28,10 +29,11 @@ export default async function AppLayout({
   return (
     <div>
       {/* Top bar */}
-      <header className="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-20">
+      <header
+        className="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-20"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
         <div className="h-[52px] px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
-          <MobileNav />
-
           <Link
             href="/dashboard"
             className="flex items-center gap-2.5 shrink-0"
@@ -82,8 +84,14 @@ export default async function AppLayout({
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 pb-24 md:pb-6">
+          {children}
+        </main>
       </div>
+
+      {/* Navigazione mobile: barra in basso + drawer completo (via "Altro") */}
+      <MobileTabBar />
+      <MobileNav />
     </div>
   );
 }

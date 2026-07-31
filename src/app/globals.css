@@ -20,6 +20,54 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ============== MOBILE FEEL / PWA ============== */
+@media (max-width: 767px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    /* niente flash grigio al tap, niente rimbalzo verticale da app */
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  /* i controlli piccoli restano cliccabili ma con feedback dolce */
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Animazioni del drawer di navigazione mobile */
+@keyframes fp-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes fp-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fp-drawer-panel {
+  animation: fp-slide-in-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.fp-drawer-backdrop {
+  animation: fp-fade-in 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-drawer-panel,
+  .fp-drawer-backdrop {
+    animation: none;
+  }
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
