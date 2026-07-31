@@ -30,7 +30,7 @@ export default async function AppLayout({
     <div>
       {/* Top bar */}
       <header
-        className="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-20"
+        className="border-b border-line bg-white sticky top-0 z-20"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="h-[52px] px-3 sm:px-4 flex items-center gap-2 sm:gap-3">

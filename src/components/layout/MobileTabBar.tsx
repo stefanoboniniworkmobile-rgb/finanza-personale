@@ -30,8 +30,8 @@ export function MobileTabBar() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-line bg-white"
+      style={{ paddingBottom: "max(6px, env(safe-area-inset-bottom))" }}
       aria-label="Navigazione principale"
     >
       <div className="grid grid-cols-5 h-14">

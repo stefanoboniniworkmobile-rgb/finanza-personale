@@ -25,6 +25,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Impedisce lo zoom "a scatti" e migliora la resa app-like su iOS.
   maximumScale: 1,
+  // Necessario perché le safe-area (notch/barra home) siano rispettate:
+  // senza "cover", env(safe-area-inset-*) resta 0 e la barra va a filo bordo.
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({
