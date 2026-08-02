@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { SidebarNav } from "./SidebarNav";
-import { APP_VERSION, APP_CREDIT } from "@/lib/version";
+import { AppCredit } from "./AppCredit";
 
 /**
  * Drawer di navigazione completo (solo mobile). Non ha un pulsante proprio:
@@ -68,11 +68,10 @@ export function MobileNav() {
           <SidebarNav />
         </div>
         <div
-          className="shrink-0 px-4 py-3 border-t border-line text-[10px] leading-relaxed text-sub"
+          className="shrink-0 px-4 py-3 border-t border-line"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
         >
-          <div className="num-mono">v{APP_VERSION}</div>
-          <div>{APP_CREDIT}</div>
+          <AppCredit />
         </div>
       </aside>
     </div>

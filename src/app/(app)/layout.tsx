@@ -8,7 +8,7 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
-import { APP_VERSION, APP_CREDIT } from "@/lib/version";
+import { AppCredit } from "@/components/layout/AppCredit";
 
 export default async function AppLayout({
   children,
@@ -78,9 +78,8 @@ export default async function AppLayout({
         {/* Sidebar (solo desktop; su mobile → drawer in MobileNav) */}
         <aside className="hidden md:flex w-56 shrink-0 border-r border-line bg-white min-h-[calc(100vh-52px)] sticky top-[52px] self-start flex-col">
           <SidebarNav />
-          <div className="mt-auto px-4 py-3 border-t border-line text-[10px] leading-relaxed text-sub">
-            <div className="num-mono">v{APP_VERSION}</div>
-            <div>{APP_CREDIT}</div>
+          <div className="mt-auto px-4 py-3 border-t border-line">
+            <AppCredit />
           </div>
         </aside>
 

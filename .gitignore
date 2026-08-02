@@ -14,3 +14,4 @@ tsconfig.tsbuildinfo
 certificates
 .env*
 !.env.example
+public/IMG_0566.JPG
