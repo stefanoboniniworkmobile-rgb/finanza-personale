@@ -23,7 +23,7 @@ export function BorisAvatar() {
         className="shrink-0 w-10 h-10 grid place-items-center rounded-xl bg-bg border border-line hover:ring-2 hover:ring-brand-200 transition"
       >
         <Image
-          src="/boris.png"
+          src="/boris-cutout.png"
           alt="Engineer Boris"
           width={36}
           height={36}
@@ -47,7 +47,7 @@ export function BorisAvatar() {
             >
               <div className="rounded-3xl bg-white p-4 shadow-2xl">
                 <Image
-                  src="/boris.png"
+                  src="/boris-cutout.png"
                   alt="Engineer Boris"
                   width={220}
                   height={220}
