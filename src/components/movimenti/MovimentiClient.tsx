@@ -8,6 +8,7 @@ import {
   type CategoryDialogOption,
   type MovimentoDialogValue,
 } from "./MovimentoDialog";
+import { Plus } from "lucide-react";
 import { fmtDateFull, fmtN } from "@/lib/format";
 import {
   bulkSetReconciliation,
@@ -264,7 +265,69 @@ export function MovimentiClient({
         </div>
       )}
 
-      <div className="panel overflow-x-auto">
+      {/* Mobile: lista pulita e scorribile (la tabella è per desktop) */}
+      <div className="md:hidden panel overflow-hidden divide-y divide-line2">
+        {rows.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-sub">
+            Nessun movimento per i filtri attuali.
+          </div>
+        )}
+        {rows.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => openEdit(r)}
+            className="w-full text-left px-4 py-3 flex items-start gap-3 active:bg-bg"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-[14px] leading-snug break-words">
+                {r.description}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                <span
+                  className={`pill ${
+                    r.type === "income"
+                      ? "bg-ok-50 text-ok-600"
+                      : "bg-line2 text-ink2"
+                  }`}
+                >
+                  {r.categoryName}
+                </span>
+                <span className="text-[11px] text-sub">
+                  {r.bankAccountName}
+                  {r.transferGroupId ? " ↔" : ""}
+                  {r.paymentMethodName ? ` · ${r.paymentMethodName}` : ""}
+                </span>
+              </div>
+              <div className="text-[11px] text-sub num-mono mt-0.5">
+                {fmtDateFull(new Date(r.date))}
+                {r.reconciled ? " · ✓ riconciliato" : ""}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div
+                className={`num-mono font-semibold text-[15px] ${
+                  r.type === "income" ? "text-ok-600" : "text-ink"
+                }`}
+              >
+                {r.type === "income" ? "+" : "−"}
+                {fmtN(r.amount)} €
+              </div>
+              {showBalance && r.runningBalance !== null && (
+                <div
+                  className={`text-[11px] num-mono mt-0.5 ${
+                    r.runningBalance < 0 ? "text-err-600" : "text-sub"
+                  }`}
+                >
+                  saldo {fmtN(r.runningBalance)} €
+                </div>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="panel overflow-x-auto hidden md:block">
         <table className="dense">
           <thead>
             <tr>
@@ -418,6 +481,17 @@ export function MovimentiClient({
           </tbody>
         </table>
       </div>
+
+      {/* Mobile: pulsante flottante per creare un movimento col pollice */}
+      <button
+        type="button"
+        onClick={openNew}
+        aria-label="Nuovo movimento"
+        className="md:hidden fixed right-4 z-30 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg grid place-items-center active:scale-95 transition"
+        style={{ bottom: "calc(72px + env(safe-area-inset-bottom))" }}
+      >
+        <Plus size={26} strokeWidth={2.5} />
+      </button>
 
       <MovimentoDialog
         open={dialogOpen}
