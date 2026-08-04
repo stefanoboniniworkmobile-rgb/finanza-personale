@@ -164,10 +164,12 @@ export default async function BudgetPage(props: { searchParams: SearchParams }) 
       <div className="flex items-center justify-between mb-4 gap-3">
         <div className="min-w-0">
           <div className="text-xs text-sub">Pianificazione</div>
-          <h1 className="text-xl font-semibold tracking-tight">Budget {year}</h1>
+          <h1 className="text-xl font-semibold tracking-tight truncate">
+            Budget {year}
+          </h1>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <div className="text-xs text-sub">
+          <div className="hidden sm:block text-xs text-sub">
             {rows.length} categorie ·{" "}
             {rows.reduce((s, r) => s + r.overrideCount, 0)} override
           </div>

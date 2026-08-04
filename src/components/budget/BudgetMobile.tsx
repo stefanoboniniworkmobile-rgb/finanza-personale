@@ -45,14 +45,14 @@ export function BudgetMobile({
         const residuo = eff - spent;
         return (
           <div className="panel p-4 mb-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="ph">Budget {year}</div>
-                <div className="text-[26px] font-semibold num tracking-tight leading-none mt-1">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="ph">Totale anno</div>
+                <div className="text-[26px] font-semibold num tracking-tight leading-none mt-1 truncate">
                   {fmtN(eff)} €
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <div className="ph">Speso</div>
                 <div className="text-base num mt-1">{fmtN(spent)} €</div>
               </div>
