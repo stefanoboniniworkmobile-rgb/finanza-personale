@@ -36,19 +36,44 @@ export function BudgetMobile({
 
   return (
     <div className="md:hidden">
-      {/* Totale anno */}
-      <div className="panel p-4 mb-3 flex items-center justify-between">
-        <div>
-          <div className="ph">Totale budget {year}</div>
-          <div className="text-2xl font-semibold num tracking-tight mt-0.5">
-            {fmtN(totals.yearEffective)} €
+      {/* Totale anno — hero con avanzamento */}
+      {(() => {
+        const eff = totals.yearEffective;
+        const spent = totals.yearSpent;
+        const pct = eff > 0 ? Math.min(100, (spent / eff) * 100) : 0;
+        const over = eff > 0 && spent > eff;
+        const residuo = eff - spent;
+        return (
+          <div className="panel p-4 mb-3">
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="ph">Budget {year}</div>
+                <div className="text-[26px] font-semibold num tracking-tight leading-none mt-1">
+                  {fmtN(eff)} €
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="ph">Speso</div>
+                <div className="text-base num mt-1">{fmtN(spent)} €</div>
+              </div>
+            </div>
+            <div className="mt-3 bar-track">
+              <div
+                className={`bar-fill ${over ? "bar-err" : "bar-ok"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-[11px] num">
+              <span className="text-sub">{Math.round(pct)}% del budget</span>
+              <span className={over ? "text-err-600 font-medium" : "text-sub"}>
+                {over
+                  ? `sforo ${fmtN(-residuo)} €`
+                  : `residuo ${fmtN(residuo)} €`}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="text-right">
-          <div className="ph">Speso</div>
-          <div className="text-base num mt-1">{fmtN(totals.yearSpent)} €</div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Lista categorie */}
       <div className="panel overflow-hidden divide-y divide-line2">
@@ -79,21 +104,25 @@ export function BudgetMobile({
                     {fmtN(r.yearEffective)} €
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <div className="flex-1 bar-track">
-                    <div
-                      className={`bar-fill ${over ? "bar-err" : "bar-ok"}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-[11px] text-sub num shrink-0">
-                    speso {fmtN(r.yearSpent)}
+                <div className="mt-1.5 bar-track">
+                  <div
+                    className={`bar-fill ${over ? "bar-err" : "bar-ok"}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] num">
+                  <span className="text-sub">speso {fmtN(r.yearSpent)} €</span>
+                  <span className={over ? "text-err-600" : "text-sub"}>
+                    {over
+                      ? `sforo ${fmtN(r.yearSpent - r.yearEffective)} €`
+                      : `residuo ${fmtN(r.yearEffective - r.yearSpent)} €`}
                   </span>
                 </div>
                 {r.overrideCount > 0 && (
                   <div className="text-[10px] text-brand-600 mt-1">
-                    {r.overrideCount} mes{r.overrideCount === 1 ? "e" : "i"} personalizzat
-                    {r.overrideCount === 1 ? "o" : "i"}
+                    {r.overrideCount === 1
+                      ? "1 mese personalizzato"
+                      : `${r.overrideCount} mesi personalizzati`}
                   </div>
                 )}
               </div>

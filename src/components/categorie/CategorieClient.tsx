@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/categorie/actions";
 import { useRouter } from "next/navigation";
 import { fmtN0 } from "@/lib/format";
+import { ChevronRight } from "lucide-react";
 
 export type CategoriaRow = {
   id: string;
@@ -102,7 +103,60 @@ export function CategorieClient({
         </button>
       </div>
 
-      <div className="panel overflow-x-auto">
+      {/* Mobile: lista a schede (la tabella con select è per desktop) */}
+      <div className="md:hidden panel overflow-hidden divide-y divide-line2">
+        {rows.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-sub">
+            Nessuna categoria. Aggiungine una col bottone qui sopra.
+          </div>
+        )}
+        {rows.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => openEdit(r)}
+            className="w-full text-left px-4 py-3 flex items-center gap-3 active:bg-bg"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-[14px] truncate">
+                  {r.name}
+                </span>
+                <span
+                  className={`pill shrink-0 ${
+                    r.type === "income"
+                      ? "bg-ok-50 text-ok-600"
+                      : "bg-err-50 text-err-600"
+                  }`}
+                >
+                  {r.type === "income" ? "Entrata" : "Uscita"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-sub flex-wrap">
+                {r.hasBudget ? (
+                  <span className="text-brand-600 font-medium">
+                    Budget {MODE_LABEL[r.budgetMode] ?? r.budgetMode} ·{" "}
+                    {fmtN0(r.computedBudget)} €
+                  </span>
+                ) : (
+                  <span>Budget off</span>
+                )}
+                <span>· {r.txCount} mov.</span>
+                {r.showInDashboard && <span>· in dashboard</span>}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="num-mono text-[13px] text-ink2">
+                {fmtN0(r.spentCurrentPeriod)} €
+              </div>
+              <div className="text-[10px] text-sub">speso mese</div>
+            </div>
+            <ChevronRight size={18} className="text-sub shrink-0" />
+          </button>
+        ))}
+      </div>
+
+      <div className="panel overflow-x-auto hidden md:block">
         <table className="dense">
           <thead>
             <tr>
