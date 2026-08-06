@@ -458,3 +458,13 @@ table.budget-grid th.is-actual-header {
 table.budget-grid tfoot td.is-actual-cell {
   background: rgba(238, 240, 244, 0.55);
 }
+
+/* Filtri Movimenti: quando espansi su mobile, i campi vanno a piena larghezza */
+@media (max-width: 767px) {
+  .fp-filters-adv > label {
+    width: 100%;
+  }
+  .fp-filters-adv .input {
+    width: 100%;
+  }
+}

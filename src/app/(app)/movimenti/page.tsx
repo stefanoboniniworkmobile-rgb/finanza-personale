@@ -6,6 +6,7 @@ import {
   MovimentiClient,
   type MovimentoRow,
 } from "@/components/movimenti/MovimentiClient";
+import { FilterDisclosure } from "@/components/movimenti/FilterDisclosure";
 import {
   fmtEURFull,
   fmtMonthLong,
@@ -299,6 +300,19 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
         })()
       : null;
 
+  // Conteggio filtri attivi (esclude Periodo, quasi sempre valorizzato) per il
+  // badge del toggle "Filtri" su mobile.
+  const activeFilterCount =
+    (tipo !== "all" ? 1 : 0) +
+    (conto !== "all" ? 1 : 0) +
+    (cat !== "all" ? 1 : 0) +
+    (mod !== "all" ? 1 : 0) +
+    (q ? 1 : 0) +
+    (ric !== "all" ? 1 : 0) +
+    (origine !== "all" ? 1 : 0) +
+    (dashboard !== "all" ? 1 : 0) +
+    (ricNote ? 1 : 0);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -316,6 +330,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
         action="/movimenti"
         className="panel p-3 mb-3 flex flex-wrap gap-2 items-end"
       >
+        <FilterDisclosure activeCount={activeFilterCount}>
         <FilterField label="Periodo">
           <select
             name="period"
@@ -443,6 +458,7 @@ export default async function MovimentiPage(props: { searchParams: SearchParams 
         <a href="/movimenti" className="btn-ghost !h-8 !text-xs">
           Reset
         </a>
+        </FilterDisclosure>
       </form>
 
       {/* Riassunto aggregato sul set filtrato (intero, non solo pagina corrente) */}
