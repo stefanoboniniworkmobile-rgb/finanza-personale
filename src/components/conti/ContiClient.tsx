@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Landmark } from "lucide-react";
 import { ContoDialog, type ContoDialogValue } from "./ContoDialog";
 import { fmtN } from "@/lib/format";
 
@@ -25,6 +26,27 @@ const TYPE_LABEL: Record<string, { label: string; cls: string }> = {
 };
 
 const NO_BANK = "__none__";
+
+// Avatar dell'istituto: iniziali + colore stabile derivato dal nome, così ogni
+// banca ha sempre lo stesso "badge" ed è riconoscibile a colpo d'occhio.
+const AVATAR_PALETTE = [
+  "bg-brand-50 text-brand-600",
+  "bg-ok-50 text-ok-600",
+  "bg-warn-50 text-warn-600",
+  "bg-err-50 text-err-600",
+  "bg-line2 text-ink2",
+];
+function bankInitials(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "—";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+function avatarClass(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}
 
 export function ContiClient({ rows }: { rows: ContoRow[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -107,17 +129,35 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
         {groups.map((g) => (
           <div key={g.key} className="panel overflow-hidden">
             {grouped && (
-              <div className="px-4 py-2 bg-bg border-b border-line2 flex items-center justify-between gap-3">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink2 truncate">
-                  {g.label}
-                </span>
+              <div className="px-3 py-3 flex items-center gap-3 border-b border-line2">
                 <span
-                  className={`num-mono text-[12px] font-semibold shrink-0 ${
+                  className={`w-9 h-9 rounded-xl grid place-items-center text-[12px] font-bold shrink-0 ${
+                    g.key === NO_BANK
+                      ? "bg-line2 text-sub"
+                      : avatarClass(g.key)
+                  }`}
+                >
+                  {g.key === NO_BANK ? (
+                    <Landmark size={16} strokeWidth={2} />
+                  ) : (
+                    bankInitials(g.label)
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[14px] truncate">
+                    {g.label}
+                  </div>
+                  <div className="text-[11px] text-sub">
+                    {g.rows.length} cont{g.rows.length === 1 ? "o" : "i"}
+                  </div>
+                </div>
+                <div
+                  className={`num-mono font-semibold text-[16px] shrink-0 ${
                     g.subSaldo < 0 ? "text-err-600" : ""
                   }`}
                 >
                   {fmtN(g.subSaldo)} €
-                </span>
+                </div>
               </div>
             )}
             <div className="divide-y divide-line2">
