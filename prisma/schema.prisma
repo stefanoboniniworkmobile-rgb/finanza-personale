@@ -131,6 +131,12 @@ model BankAccount {
   type           String        @default("liquidity") // liquidity | credit_card | savings | cash
   notes          String?
 
+  // Istituto/banca a scopo di raggruppamento nell'anagrafica conti (es.
+  // "Intesa Sanpaolo", "Fineco", "Revolut"). Campo libero, opzionale: non è
+  // legato all'aggancio PSD2 (che vive in BankConnection). Serve solo a
+  // raggruppare visivamente i conti per istituto.
+  bank           String?
+
   // Identificativi del conto. Opzionali (i contanti non hanno né IBAN né PAN).
   // Servono per il matching automatico con gli account ritornati da Enable Banking
   // in fase di aggancio PSD2 (un consenso può ritornare più conti — c/c + carta EGO,

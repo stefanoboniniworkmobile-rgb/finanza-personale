@@ -22,10 +22,12 @@ export function ContoDialog({
   open,
   onClose,
   initial,
+  banks = [],
 }: {
   open: boolean;
   onClose: () => void;
   initial?: ContoDialogValue;
+  banks?: string[];
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const router = useRouter();
@@ -33,6 +35,7 @@ export function ContoDialog({
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(initial?.name ?? "");
+  const [bank, setBank] = useState(initial?.bank ?? "");
   const [type, setType] = useState<string>(initial?.type ?? "liquidity");
   const [initialBalanceNum, setInitialBalanceNum] = useState<number | null>(
     initial?.initialBalance != null ? initial.initialBalance : 0,
@@ -45,6 +48,7 @@ export function ContoDialog({
     if (!open) return;
     setError(null);
     setName(initial?.name ?? "");
+    setBank(initial?.bank ?? "");
     setType(initial?.type ?? "liquidity");
     setInitialBalanceNum(initial?.initialBalance != null ? initial.initialBalance : 0);
     setNotes(initial?.notes ?? "");
@@ -68,6 +72,7 @@ export function ContoDialog({
       type: type as any,
       initialBalance: initialBalanceNum ?? 0,
       notes: notes || null,
+      bank: bank.trim() || null,
       iban: iban.trim() || null,
       cardMaskedPan: cardMaskedPan.trim() || null,
     };
@@ -136,6 +141,27 @@ export function ContoDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder="Es. Intesa C/C, Carta Revolut, Cassa"
             />
+          </Field>
+
+          <Field label="Banca / Istituto (opzionale)">
+            <input
+              type="text"
+              list="conto-banks"
+              maxLength={60}
+              className="input w-full"
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              placeholder="Es. Intesa Sanpaolo, Fineco, Revolut"
+            />
+            <datalist id="conto-banks">
+              {banks.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+            <div className="text-[11px] text-sub mt-1">
+              Serve a raggruppare i conti per istituto nell'anagrafica. Scegli
+              da quelle già usate o scrivine una nuova.
+            </div>
           </Field>
 
           <Field label="Tipo">

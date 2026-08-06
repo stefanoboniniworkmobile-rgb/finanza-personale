@@ -15,7 +15,7 @@ export default async function ContiPage(props: { searchParams: Promise<{ type?: 
   const accounts = await prisma.bankAccount.findMany({
     where: type === "all" ? { holderId } : { holderId, type },
     include: { _count: { select: { transactions: true } } },
-    orderBy: { name: "asc" },
+    orderBy: [{ bank: "asc" }, { name: "asc" }],
   });
 
   // Calcolo saldo attuale = initialBalance + Σ(entrate) - Σ(uscite)
@@ -39,6 +39,7 @@ export default async function ContiPage(props: { searchParams: Promise<{ type?: 
     name: a.name,
     type: a.type,
     notes: a.notes,
+    bank: a.bank,
     initialBalance: a.initialBalance,
     iban: a.iban,
     cardMaskedPan: a.cardMaskedPan,

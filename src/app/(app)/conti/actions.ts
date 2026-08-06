@@ -18,6 +18,14 @@ const inputSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   initialBalance: z.coerce.number().min(-1_000_000).max(10_000_000),
   notes: z.string().trim().max(300).nullable().optional(),
+  // Istituto/banca per raggruppamento. Campo libero opzionale.
+  bank: z
+    .string()
+    .trim()
+    .max(60)
+    .transform((v) => (v === "" ? null : v))
+    .nullable()
+    .optional(),
   // Normalizzato uppercase senza spazi prima di validare la regex.
   iban: z
     .string()
@@ -76,6 +84,7 @@ export async function saveConto(raw: ContoInput): Promise<ActionResult> {
           type: v.type,
           initialBalance: v.initialBalance,
           notes: v.notes || null,
+          bank: v.bank ?? null,
           iban: v.iban ?? null,
           cardMaskedPan: v.cardMaskedPan ?? null,
         },
@@ -89,6 +98,7 @@ export async function saveConto(raw: ContoInput): Promise<ActionResult> {
           type: v.type,
           initialBalance: v.initialBalance,
           notes: v.notes || null,
+          bank: v.bank ?? null,
           iban: v.iban ?? null,
           cardMaskedPan: v.cardMaskedPan ?? null,
         },

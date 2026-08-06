@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ContoDialog, type ContoDialogValue } from "./ContoDialog";
 import { fmtN } from "@/lib/format";
 
@@ -9,6 +9,7 @@ export type ContoRow = {
   name: string;
   type: string;
   notes: string | null;
+  bank: string | null;
   initialBalance: number;
   iban: string | null;
   cardMaskedPan: string | null;
@@ -23,6 +24,8 @@ const TYPE_LABEL: Record<string, { label: string; cls: string }> = {
   cash: { label: "Contanti", cls: "bg-line2 text-sub" },
 };
 
+const NO_BANK = "__none__";
+
 export function ContiClient({ rows }: { rows: ContoRow[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContoDialogValue | undefined>();
@@ -36,6 +39,7 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
       id: r.id,
       name: r.name,
       type: r.type as any,
+      bank: r.bank ?? null,
       initialBalance: r.initialBalance,
       notes: r.notes ?? null,
       iban: r.iban ?? null,
@@ -48,6 +52,43 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
   const totSaldo = rows.reduce((s, r) => s + r.saldo, 0);
   const totMovs = rows.reduce((s, r) => s + r.txCount, 0);
 
+  // Elenco istituti già usati, per l'autocomplete del dialog.
+  const bankOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) if (r.bank?.trim()) set.add(r.bank.trim());
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  // Raggruppamento per istituto: banche in ordine alfabetico, "Senza istituto"
+  // sempre in fondo. Ogni gruppo porta con sé il subtotale del saldo.
+  const groups = useMemo(() => {
+    const map = new Map<string, ContoRow[]>();
+    for (const r of rows) {
+      const key = r.bank?.trim() || NO_BANK;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    const keys = [...map.keys()].sort((a, b) => {
+      if (a === NO_BANK) return 1;
+      if (b === NO_BANK) return -1;
+      return a.localeCompare(b);
+    });
+    return keys.map((k) => {
+      const rs = map.get(k)!;
+      return {
+        key: k,
+        label: k === NO_BANK ? "Senza istituto" : k,
+        rows: rs,
+        subIni: rs.reduce((s, r) => s + r.initialBalance, 0),
+        subSaldo: rs.reduce((s, r) => s + r.saldo, 0),
+        subMovs: rs.reduce((s, r) => s + r.txCount, 0),
+      };
+    });
+  }, [rows]);
+
+  // Mostriamo le intestazioni di gruppo solo se c'è almeno un istituto valorizzato.
+  const grouped = groups.some((g) => g.key !== NO_BANK);
+
   return (
     <>
       <div className="flex items-center justify-end mb-3">
@@ -56,7 +97,85 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
         </button>
       </div>
 
-      <div className="panel overflow-x-auto">
+      {/* Mobile: schede raggruppate per istituto */}
+      <div className="md:hidden space-y-3">
+        {rows.length === 0 && (
+          <div className="panel px-4 py-8 text-center text-sm text-sub">
+            Nessun conto. Aggiungine uno col bottone qui sopra.
+          </div>
+        )}
+        {groups.map((g) => (
+          <div key={g.key} className="panel overflow-hidden">
+            {grouped && (
+              <div className="px-4 py-2 bg-bg border-b border-line2 flex items-center justify-between gap-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink2 truncate">
+                  {g.label}
+                </span>
+                <span
+                  className={`num-mono text-[12px] font-semibold shrink-0 ${
+                    g.subSaldo < 0 ? "text-err-600" : ""
+                  }`}
+                >
+                  {fmtN(g.subSaldo)} €
+                </span>
+              </div>
+            )}
+            <div className="divide-y divide-line2">
+              {g.rows.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => openEdit(r)}
+                  className="w-full text-left px-4 py-3 flex items-center gap-3 active:bg-bg"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-[14px] truncate">
+                        {r.name}
+                      </span>
+                      <span
+                        className={`pill shrink-0 ${
+                          TYPE_LABEL[r.type]?.cls ?? "bg-line2 text-sub"
+                        }`}
+                      >
+                        {TYPE_LABEL[r.type]?.label ?? r.type}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-sub mt-0.5 num-mono">
+                      {r.txCount} mov.
+                      {r.iban
+                        ? ` · ${r.iban.slice(0, 2)}…${r.iban.slice(-4)}`
+                        : ""}
+                    </div>
+                  </div>
+                  <div
+                    className={`num-mono font-semibold text-[15px] shrink-0 ${
+                      r.saldo < 0 ? "text-err-600" : ""
+                    }`}
+                  >
+                    {fmtN(r.saldo)} €
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {rows.length > 0 && (
+          <div className="panel px-4 py-3 flex items-center justify-between">
+            <span className="text-xs font-semibold">TOTALE</span>
+            <span
+              className={`num-mono font-semibold text-[15px] ${
+                totSaldo < 0 ? "text-err-600" : ""
+              }`}
+            >
+              {fmtN(totSaldo)} €
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: tabella raggruppata per istituto */}
+      <div className="panel overflow-x-auto hidden md:block">
         <table className="dense">
           <thead>
             <tr>
@@ -73,46 +192,82 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
               </th>
             </tr>
           </thead>
-          <tbody>
-            {rows.length === 0 && (
+          {rows.length === 0 && (
+            <tbody>
               <tr>
                 <td colSpan={5} className="px-3 py-12 text-center text-sub">
                   Nessun conto. Aggiungine uno col bottone qui sopra.
                 </td>
               </tr>
-            )}
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="row cursor-pointer"
-                onClick={() => openEdit(r)}
-              >
-                <td>
-                  <div className="font-medium">{r.name}</div>
-                  {r.notes && (
-                    <div
-                      className="text-xs text-sub truncate max-w-[260px]"
-                      title={r.notes}
-                    >
-                      {r.notes}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <span className={`pill ${TYPE_LABEL[r.type]?.cls ?? "bg-line2 text-sub"}`}>
-                    {TYPE_LABEL[r.type]?.label ?? r.type}
-                  </span>
-                </td>
-                <td className="text-right num-mono text-sub">{fmtN(r.initialBalance)}</td>
-                <td
-                  className={`text-right num-mono font-semibold ${r.saldo < 0 ? "text-err-600" : ""}`}
+            </tbody>
+          )}
+          {groups.map((g) => (
+            <tbody key={g.key}>
+              {grouped && (
+                <tr className="bg-bg">
+                  <td
+                    colSpan={2}
+                    className="font-semibold text-[11px] uppercase tracking-wider text-ink2"
+                  >
+                    {g.label}{" "}
+                    <span className="text-sub font-normal normal-case">
+                      · {g.rows.length} cont{g.rows.length === 1 ? "o" : "i"}
+                    </span>
+                  </td>
+                  <td className="text-right num-mono text-sub">
+                    {fmtN(g.subIni)}
+                  </td>
+                  <td
+                    className={`text-right num-mono font-semibold ${
+                      g.subSaldo < 0 ? "text-err-600" : ""
+                    }`}
+                  >
+                    {fmtN(g.subSaldo)}
+                  </td>
+                  <td className="text-right num-mono text-sub">{g.subMovs}</td>
+                </tr>
+              )}
+              {g.rows.map((r) => (
+                <tr
+                  key={r.id}
+                  className="row cursor-pointer"
+                  onClick={() => openEdit(r)}
                 >
-                  {fmtN(r.saldo)}
-                </td>
-                <td className="text-right num-mono text-sub">{r.txCount}</td>
-              </tr>
-            ))}
-          </tbody>
+                  <td>
+                    <div className="font-medium">{r.name}</div>
+                    {r.notes && (
+                      <div
+                        className="text-xs text-sub truncate max-w-[260px]"
+                        title={r.notes}
+                      >
+                        {r.notes}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <span
+                      className={`pill ${
+                        TYPE_LABEL[r.type]?.cls ?? "bg-line2 text-sub"
+                      }`}
+                    >
+                      {TYPE_LABEL[r.type]?.label ?? r.type}
+                    </span>
+                  </td>
+                  <td className="text-right num-mono text-sub">
+                    {fmtN(r.initialBalance)}
+                  </td>
+                  <td
+                    className={`text-right num-mono font-semibold ${
+                      r.saldo < 0 ? "text-err-600" : ""
+                    }`}
+                  >
+                    {fmtN(r.saldo)}
+                  </td>
+                  <td className="text-right num-mono text-sub">{r.txCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
           {rows.length > 0 && (
             <tfoot>
               <tr>
@@ -120,7 +275,9 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
                   TOTALE
                 </td>
                 <td className="text-right num-mono text-sub">{fmtN(totIni)}</td>
-                <td className="text-right num-mono font-semibold">{fmtN(totSaldo)}</td>
+                <td className="text-right num-mono font-semibold">
+                  {fmtN(totSaldo)}
+                </td>
                 <td className="text-right num-mono text-sub">{totMovs}</td>
               </tr>
             </tfoot>
@@ -132,6 +289,7 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         initial={editing}
+        banks={bankOptions}
       />
     </>
   );
