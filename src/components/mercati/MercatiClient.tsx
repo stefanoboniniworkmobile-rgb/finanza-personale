@@ -380,7 +380,144 @@ export function MercatiClient({
         </div>
       )}
 
-      <div className="panel overflow-x-auto">
+      {/* Mobile: watchlist a schede (la tabella a 11 colonne è per desktop) */}
+      <div className="md:hidden panel overflow-hidden divide-y divide-line2">
+        {rows.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-sub">
+            Nessun asset nella watchlist. Aggiungine uno col bottone in alto.
+          </div>
+        )}
+        {rows.length > 0 && filteredRows.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-sub">
+            Nessun asset corrisponde a &quot;{searchText}&quot;.{" "}
+            <button
+              type="button"
+              onClick={() => setSearchText("")}
+              className="underline"
+            >
+              Pulisci ricerca
+            </button>
+          </div>
+        )}
+        {filteredRows.map((r) => {
+          const quoteLink = quotePageLink(r);
+          const cur = r.currency !== "%" ? r.currency : "%";
+          const h = r.holding;
+          return (
+            <div
+              key={r.id}
+              className="px-4 py-3 active:bg-bg"
+              onClick={() => openEdit(r)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="num-mono font-semibold text-[14px]">
+                      {r.symbol}
+                    </span>
+                    {r.provider === "manual" && (
+                      <span className="text-[9px] font-medium text-warn-600 bg-warn-50 border border-warn-500/30 rounded px-1">
+                        MAN
+                      </span>
+                    )}
+                    <span className="pill bg-line2 text-ink2">
+                      {CLASS_LABELS[r.assetClass] ?? r.assetClass}
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-ink2 truncate mt-0.5">
+                    {r.name}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="num-mono font-semibold text-[14px]">
+                    {r.lastPrice != null ? `${fmtN(r.lastPrice)} ${cur}` : "—"}
+                  </div>
+                  <div className="text-[11px] num-mono mt-0.5">
+                    <MobileChange pct={r.changeDayPct} />{" "}
+                    <span className="text-sub">oggi</span>
+                  </div>
+                </div>
+              </div>
+
+              {h && (
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-bg px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="ph">Posizione</div>
+                    <div className="num-mono text-[13px] text-ink">
+                      {h.value != null
+                        ? `${fmtN(h.value)} ${r.currency !== "%" ? r.currency : ""}`
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {h.pnl != null && h.pnlPct != null && (
+                      <div
+                        className={`num-mono text-[13px] font-semibold ${
+                          h.pnl >= 0 ? "text-ok-600" : "text-err-600"
+                        }`}
+                      >
+                        {h.pnl >= 0 ? "+" : "−"}
+                        {fmtN(Math.abs(h.pnl))} ({h.pnl >= 0 ? "+" : ""}
+                        {h.pnlPct.toFixed(1)}%)
+                      </div>
+                    )}
+                    {h.annualizedPct != null && (
+                      <div
+                        className={`text-[11px] num-mono ${
+                          h.annualizedPct >= 0 ? "text-ok-600" : "text-err-600"
+                        }`}
+                      >
+                        {h.annualizedPct >= 0 ? "+" : ""}
+                        {h.annualizedPct.toFixed(1)}%/anno
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-[11px] num-mono">
+                  <MobileVar label="7g" pct={r.changeWeekPct} />
+                  <MobileVar label="30g" pct={r.changeMonthPct} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sparkline points={r.sparkPoints} width={84} height={26} />
+                  {quoteLink && (
+                    <a
+                      href={quoteLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      title={`Vedi la quotazione su ${quoteLink.label}`}
+                      className="btn-ghost !h-7 !text-[11px] !px-2"
+                    >
+                      ↗
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRefreshOne(r.id);
+                    }}
+                    disabled={rowPending || r.provider === "manual"}
+                    title={
+                      r.provider === "manual"
+                        ? "Asset manuale: aggiorna il prezzo dalla scheda"
+                        : "Aggiorna ora"
+                    }
+                    className="btn-ghost !h-7 !text-[11px] !px-2"
+                  >
+                    {rowPending ? "…" : "↻"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="panel overflow-x-auto hidden md:block">
         <table className="dense">
           <thead>
             <tr>
@@ -614,6 +751,38 @@ export function MercatiClient({
         initial={editing}
       />
     </>
+  );
+}
+
+/** Variazione giornaliera in linea (schede mobile). */
+function MobileChange({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-sub">—</span>;
+  const cls = pct > 0 ? "text-ok-600" : pct < 0 ? "text-err-600" : "text-sub";
+  return (
+    <span className={cls}>
+      {pct > 0 ? "+" : ""}
+      {pct.toFixed(2)}%
+    </span>
+  );
+}
+
+/** Coppia etichetta + variazione (schede mobile, es. "7g +1,2%"). */
+function MobileVar({ label, pct }: { label: string; pct: number | null }) {
+  const cls =
+    pct == null
+      ? "text-sub"
+      : pct > 0
+        ? "text-ok-600"
+        : pct < 0
+          ? "text-err-600"
+          : "text-sub";
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-sub">{label}</span>
+      <span className={cls}>
+        {pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`}
+      </span>
+    </span>
   );
 }
 
