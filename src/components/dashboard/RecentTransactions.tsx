@@ -54,7 +54,8 @@ export function RecentTransactions({ rows }: { rows: RecentRow[] }) {
         ))}
       </div>
 
-      <table className="dense hidden md:table">
+      <div className="hidden md:block overflow-x-auto">
+        <table className="dense">
         <thead>
           <tr>
             <th style={{ width: 90 }}>Data</th>
@@ -94,7 +95,8 @@ export function RecentTransactions({ rows }: { rows: RecentRow[] }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }
