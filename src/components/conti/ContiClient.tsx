@@ -48,6 +48,10 @@ function avatarClass(key: string): string {
   return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
 }
 
+// Griglia desktop condivisa: stesse colonne in intestazione, righe e totale, così
+// restano allineate tra card di istituti diversi.
+const DESK_COLS = "grid grid-cols-[1fr_110px_130px_140px_80px] gap-4";
+
 export function ContiClient({ rows }: { rows: ContoRow[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContoDialogValue | undefined>();
@@ -214,77 +218,78 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
         )}
       </div>
 
-      {/* Desktop: tabella raggruppata per istituto */}
-      <div className="panel overflow-x-auto hidden md:block">
-        <table className="dense">
-          <thead>
-            <tr>
-              <th>Conto</th>
-              <th style={{ width: 110 }}>Tipo</th>
-              <th className="text-right" style={{ width: 130 }}>
-                Saldo iniziale
-              </th>
-              <th className="text-right" style={{ width: 130 }}>
-                Saldo attuale
-              </th>
-              <th className="text-right" style={{ width: 80 }}>
-                N. mov.
-              </th>
-            </tr>
-          </thead>
-          {rows.length === 0 && (
-            <tbody>
-              <tr>
-                <td colSpan={5} className="px-3 py-12 text-center text-sub">
-                  Nessun conto. Aggiungine uno col bottone qui sopra.
-                </td>
-              </tr>
-            </tbody>
-          )}
-          {groups.map((g) => (
-            <tbody key={g.key}>
-              {grouped && (
-                <tr className="bg-bg">
-                  <td
-                    colSpan={2}
-                    className="font-semibold text-[11px] uppercase tracking-wider text-ink2"
-                  >
-                    {g.label}{" "}
-                    <span className="text-sub font-normal normal-case">
-                      · {g.rows.length} cont{g.rows.length === 1 ? "o" : "i"}
-                    </span>
-                  </td>
-                  <td className="text-right num-mono text-sub">
-                    {fmtN(g.subIni)}
-                  </td>
-                  <td
-                    className={`text-right num-mono font-semibold ${
+      {/* Desktop: card per istituto (colonne allineate tra le card) */}
+      <div className="hidden md:block space-y-3">
+        {rows.length === 0 && (
+          <div className="panel px-4 py-12 text-center text-sub">
+            Nessun conto. Aggiungine uno col bottone qui sopra.
+          </div>
+        )}
+        {rows.length > 0 && (
+          <div
+            className={`${DESK_COLS} items-center px-4 text-[10px] uppercase tracking-wider text-sub font-semibold`}
+          >
+            <div>Conto</div>
+            <div>Tipo</div>
+            <div className="text-right">Saldo iniziale</div>
+            <div className="text-right">Saldo attuale</div>
+            <div className="text-right">N. mov.</div>
+          </div>
+        )}
+        {groups.map((g) => (
+          <div key={g.key} className="panel overflow-hidden">
+            {grouped && (
+              <div className="px-4 py-3 flex items-center gap-3 border-b border-line2">
+                <span
+                  className={`w-9 h-9 rounded-xl grid place-items-center text-[12px] font-bold shrink-0 ${
+                    g.key === NO_BANK ? "bg-line2 text-sub" : avatarClass(g.key)
+                  }`}
+                >
+                  {g.key === NO_BANK ? (
+                    <Landmark size={16} strokeWidth={2} />
+                  ) : (
+                    bankInitials(g.label)
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[14px] truncate">
+                    {g.label}
+                  </div>
+                  <div className="text-[11px] text-sub">
+                    {g.rows.length} cont{g.rows.length === 1 ? "o" : "i"}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="ph">Saldo istituto</div>
+                  <div
+                    className={`num-mono font-semibold text-[16px] ${
                       g.subSaldo < 0 ? "text-err-600" : ""
                     }`}
                   >
-                    {fmtN(g.subSaldo)}
-                  </td>
-                  <td className="text-right num-mono text-sub">{g.subMovs}</td>
-                </tr>
-              )}
+                    {fmtN(g.subSaldo)} €
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="divide-y divide-line2">
               {g.rows.map((r) => (
-                <tr
+                <div
                   key={r.id}
-                  className="row cursor-pointer"
                   onClick={() => openEdit(r)}
+                  className={`${DESK_COLS} items-center px-4 py-2.5 cursor-pointer hover:bg-bg transition-colors`}
                 >
-                  <td>
-                    <div className="font-medium">{r.name}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{r.name}</div>
                     {r.notes && (
                       <div
-                        className="text-xs text-sub truncate max-w-[260px]"
+                        className="text-xs text-sub truncate"
                         title={r.notes}
                       >
                         {r.notes}
                       </div>
                     )}
-                  </td>
-                  <td>
+                  </div>
+                  <div>
                     <span
                       className={`pill ${
                         TYPE_LABEL[r.type]?.cls ?? "bg-line2 text-sub"
@@ -292,37 +297,40 @@ export function ContiClient({ rows }: { rows: ContoRow[] }) {
                     >
                       {TYPE_LABEL[r.type]?.label ?? r.type}
                     </span>
-                  </td>
-                  <td className="text-right num-mono text-sub">
+                  </div>
+                  <div className="text-right num-mono text-sub">
                     {fmtN(r.initialBalance)}
-                  </td>
-                  <td
+                  </div>
+                  <div
                     className={`text-right num-mono font-semibold ${
                       r.saldo < 0 ? "text-err-600" : ""
                     }`}
                   >
                     {fmtN(r.saldo)}
-                  </td>
-                  <td className="text-right num-mono text-sub">{r.txCount}</td>
-                </tr>
+                  </div>
+                  <div className="text-right num-mono text-sub">{r.txCount}</div>
+                </div>
               ))}
-            </tbody>
-          ))}
-          {rows.length > 0 && (
-            <tfoot>
-              <tr>
-                <td colSpan={2} className="font-semibold text-xs">
-                  TOTALE
-                </td>
-                <td className="text-right num-mono text-sub">{fmtN(totIni)}</td>
-                <td className="text-right num-mono font-semibold">
-                  {fmtN(totSaldo)}
-                </td>
-                <td className="text-right num-mono text-sub">{totMovs}</td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+            </div>
+          </div>
+        ))}
+        {rows.length > 0 && (
+          <div className={`panel ${DESK_COLS} items-center px-4 py-3`}>
+            <div className="font-semibold text-xs uppercase tracking-wide">
+              Totale
+            </div>
+            <div />
+            <div className="text-right num-mono text-sub">{fmtN(totIni)}</div>
+            <div
+              className={`text-right num-mono font-semibold ${
+                totSaldo < 0 ? "text-err-600" : ""
+              }`}
+            >
+              {fmtN(totSaldo)}
+            </div>
+            <div className="text-right num-mono text-sub">{totMovs}</div>
+          </div>
+        )}
       </div>
 
       <ContoDialog
