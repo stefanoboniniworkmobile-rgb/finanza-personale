@@ -25,7 +25,50 @@ export function AccountsTable({
           + Aggiungi conto
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      {/* Mobile: schede saldo (la tabella a 7 colonne è per desktop) */}
+      <div className="md:hidden flex-1 overflow-y-auto divide-y divide-line2">
+        {accounts.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-sub">
+            Nessun conto collegato.
+          </div>
+        )}
+        {accounts.map((a) => (
+          <div key={a.id} className="px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-[14px] truncate">{a.name}</span>
+                <AccountTypeBadge type={a.type} name={a.name} />
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-[11px] num-mono">
+                <span className="text-ok-600">+{fmtN(a.entrate)}</span>
+                <span className="text-err-600">−{fmtN(a.uscite)}</span>
+                <span className="text-sub">· {a.movs} mov.</span>
+              </div>
+            </div>
+            <div
+              className={`num-mono font-semibold text-[15px] shrink-0 ${
+                a.saldo < 0 ? "text-err-600" : ""
+              }`}
+            >
+              {fmtN(a.saldo)} €
+            </div>
+          </div>
+        ))}
+        {accounts.length > 0 && (
+          <div className="px-4 py-3 flex items-center justify-between bg-bg/60">
+            <span className="text-xs font-semibold">TOTALE</span>
+            <span
+              className={`num-mono font-semibold text-[15px] ${
+                totSaldo < 0 ? "text-err-600" : ""
+              }`}
+            >
+              {fmtN(totSaldo)} €
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="hidden md:block flex-1 overflow-y-auto">
         <table className="dense">
           <thead>
             <tr>

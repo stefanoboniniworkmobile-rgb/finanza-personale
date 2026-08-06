@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { DashboardData } from "@/lib/dashboard";
 import { fmtEUR, fmtK, fmtN0 } from "@/lib/format";
+import { PrivacyValue, PrivacyBlur } from "./PrivacyAmount";
 
 type Tone = "brand" | "ok" | "err";
 const BADGE: Record<Tone, string> = {
@@ -35,11 +36,14 @@ export function KpiStrip({ data }: { data: DashboardData }) {
           tone="brand"
           label="Patrimonio totale"
           value={fmtEUR(k.patrimonioTotal)}
+          valueNode={<PrivacyValue value={fmtEUR(k.patrimonioTotal)} />}
         >
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Chip>Liquidità {fmtK(k.liquidity)}</Chip>
-            <Chip>Risparmi {fmtK(k.savings)}</Chip>
-          </div>
+          <PrivacyBlur>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Chip>Liquidità {fmtK(k.liquidity)}</Chip>
+              <Chip>Risparmi {fmtK(k.savings)}</Chip>
+            </div>
+          </PrivacyBlur>
         </PrimaryCard>
 
         <PrimaryCard
@@ -111,6 +115,7 @@ function PrimaryCard({
   tone,
   label,
   value,
+  valueNode,
   children,
 }: {
   href: string;
@@ -118,6 +123,7 @@ function PrimaryCard({
   tone: Tone;
   label: string;
   value: string;
+  valueNode?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -132,7 +138,7 @@ function PrimaryCard({
         </span>
       </div>
       <div className="text-[26px] leading-none font-semibold num tracking-tight text-ink mt-3">
-        {value}
+        {valueNode ?? value}
       </div>
       <div className="mt-2.5 min-h-[22px]">{children}</div>
     </Link>
