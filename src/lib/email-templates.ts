@@ -37,23 +37,32 @@ export function buildMagicLinkEmail(args: {
   url: string;
   to: string;
   host?: string; // dominio della webapp (es. "finanza-personale.app")
-  expiryHours?: number; // default 24h, allineato con Auth.js
+  code?: string; // codice OTP a 6 cifre, mostrato in evidenza
+  expiryMinutes?: number; // default 15 min
 }): MagicLinkTemplate {
-  const { url, to, host, expiryHours = 24 } = args;
+  const { url, to, host, code, expiryMinutes = 15 } = args;
   const safeHost = host ?? "Finanza Personale";
 
-  const subject = `Accedi a ${BRAND.name}`;
-  const preheader = `Apri questo link per entrare in ${BRAND.name}. Scade tra ${expiryHours} ore.`;
+  const subject = code
+    ? `${code} — codice di accesso a ${BRAND.name}`
+    : `Accedi a ${BRAND.name}`;
+  const preheader = code
+    ? `Il tuo codice è ${code}. Valido ${expiryMinutes} minuti.`
+    : `Apri questo link per entrare in ${BRAND.name}.`;
 
-  // Plain-text fallback: leggibile, niente HTML, link nudo (i client mobili
-  // mostrano comunque il link cliccabile).
+  // Plain-text fallback: leggibile, niente HTML.
   const text = [
     `Ciao,`,
     ``,
-    `clicca questo link per accedere a ${BRAND.name}:`,
-    url,
+    code
+      ? `il tuo codice di accesso a ${BRAND.name} è:`
+      : `clicca questo link per accedere a ${BRAND.name}:`,
+    code ? code : url,
     ``,
-    `Il link è valido per ${expiryHours} ore e può essere usato una sola volta.`,
+    code
+      ? `Inseriscilo nell'app. È valido ${expiryMinutes} minuti e può essere usato una sola volta.`
+      : `Il link è valido ${expiryMinutes} minuti e può essere usato una sola volta.`,
+    ...(code ? [`In alternativa, da questo dispositivo puoi aprire: ${url}`] : []),
     `Se non sei stato tu a richiederlo, ignora questa email.`,
     ``,
     `— ${BRAND.name}`,
@@ -114,11 +123,39 @@ ${escapeHtml(preheader)}
               Accedi al tuo account
             </h1>
             <p style="font-size:14px;line-height:1.55;color:${BRAND.sub};margin:0 0 20px 0;">
-              Hai richiesto un link di accesso per <strong style="color:${BRAND.ink};">${escapeHtml(to)}</strong>. Clicca il pulsante qui sotto per entrare. Il link è valido per <strong>${expiryHours} ore</strong> e può essere usato una sola volta.
+              Hai richiesto l'accesso per <strong style="color:${BRAND.ink};">${escapeHtml(to)}</strong>. ${
+                code
+                  ? `Inserisci questo codice nell'app per entrare:`
+                  : `Clicca il pulsante qui sotto per entrare. Valido <strong>${expiryMinutes} minuti</strong>.`
+              }
             </p>
           </td>
         </tr>
+${
+  code
+    ? `
+        <!-- Codice OTP -->
+        <tr>
+          <td align="center" style="padding:4px 32px 8px 32px;">
+            <div style="display:inline-block;font-family:'JetBrains Mono',ui-monospace,'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:${BRAND.ink};background:${BRAND.bg};border:1px solid ${BRAND.line};border-radius:10px;padding:16px 20px 16px 30px;">
+              ${escapeHtml(code)}
+            </div>
+            <div style="font-size:12px;color:${BRAND.sub};margin-top:12px;">
+              Valido ${expiryMinutes} minuti · usalo una sola volta
+            </div>
+          </td>
+        </tr>
 
+        <!-- Link alternativo (stesso dispositivo) -->
+        <tr>
+          <td align="center" style="padding:8px 32px 24px 32px;">
+            <p style="font-size:12px;color:${BRAND.sub};margin:0;">
+              Sei su questo stesso dispositivo? Puoi anche
+              <a href="${escapeAttr(url)}" target="_blank" style="color:${BRAND.brandStart};text-decoration:underline;">aprire direttamente</a>.
+            </p>
+          </td>
+        </tr>`
+    : `
         <!-- CTA button -->
         <tr>
           <td align="center" style="padding:8px 32px 24px 32px;">
@@ -144,7 +181,8 @@ ${escapeHtml(preheader)}
               <a href="${escapeAttr(url)}" style="color:${BRAND.brandStart};text-decoration:underline;">${escapeHtml(url)}</a>
             </p>
           </td>
-        </tr>
+        </tr>`
+}
 
         <!-- Divider -->
         <tr>

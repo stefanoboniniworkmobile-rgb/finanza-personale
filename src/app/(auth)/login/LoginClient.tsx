@@ -1,94 +1,108 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 
 /**
- * Login page — magic link via email.
+ * Login — codice OTP via email (6 cifre).
  *
- * Stati UI:
- *   1. form: l'utente inserisce email e clicca Accedi
- *   2. sent: dopo l'invio Auth.js redirige a /login?check=1 (verifyRequest);
- *      mostriamo dove abbiamo mandato l'email + bottone "rinvia" con cooldown
- *   3. error: ?error=... popolato da Auth.js quando qualcosa va storto
+ * Perché il codice e non (solo) il magic link: su iPhone l'app installata in
+ * home (PWA standalone) e Safari sono contenitori separati. Il link della mail
+ * apre Safari, quindi il login non "attecchisce" sull'app. Digitando invece il
+ * codice DENTRO l'app, la verifica avviene nello stesso contenitore e l'app
+ * resta loggata. Il link resta come alternativa (utile da desktop/Safari).
  *
- * L'email tra step 1 → step 2 viene preservata in sessionStorage (chiave
- * `fp_login_email`). sessionStorage persiste tra reload nella stessa tab,
- * ma si pulisce alla chiusura del browser — è l'ideale per dato volatile
- * come questo. Se l'utente apre il link da un'altra tab/dispositivo non
- * vedrà l'email, ma l'esperienza degrada in modo gradevole.
+ * Flusso:
+ *   1. stage "email": l'utente inserisce l'email → signIn(redirect:false) invia
+ *      il codice e restiamo sulla pagina.
+ *   2. stage "code": l'utente digita il codice → navighiamo (GET) alla callback
+ *      di Auth.js `/api/auth/callback/nodemailer?token=CODICE&email=…`, che
+ *      verifica e crea la sessione nel contenitore corrente.
  *
- * Auth.js mappa gli errori a code stringhe (es. "Verification", "EmailSignin",
- * "AccessDenied"). Convertiamo i più comuni in messaggi friendly.
+ * `?error=` è popolato da Auth.js quando la verifica fallisce (codice errato o
+ * scaduto): lo mostriamo in cima al form.
  */
 
 const RESEND_COOLDOWN_SEC = 30;
-const STORAGE_KEY = "fp_login_email";
+
+function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
 
 export function LoginClient() {
   const t = useTranslations("auth");
   const params = useSearchParams();
 
+  const [stage, setStage] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
+  const [normEmail, setNormEmail] = useState("");
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [storedEmail, setStoredEmail] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const sent = params.get("check") === "1";
-  const errorCode = params.get("error");
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
-  // Al mount in stato `sent`, recupera l'email salvata prima del signIn
+  // Errore proveniente dalla callback (codice errato/scaduto).
   useEffect(() => {
-    if (sent && typeof window !== "undefined") {
-      const v = sessionStorage.getItem(STORAGE_KEY);
-      if (v) setStoredEmail(v);
-    }
-  }, [sent]);
+    const err = params.get("error");
+    if (err) setError(friendlyError(err));
+  }, [params]);
 
-  // Cooldown countdown per il bottone "rinvia"
+  // Countdown per "rinvia".
   useEffect(() => {
     if (cooldown <= 0) return;
     const id = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(id);
   }, [cooldown]);
 
-  async function submit(targetEmail: string) {
-    if (!targetEmail || loading || cooldown > 0) return;
+  useEffect(() => {
+    if (stage === "code") codeInputRef.current?.focus();
+  }, [stage]);
+
+  async function sendCode(targetRaw: string) {
+    const norm = normalizeEmail(targetRaw);
+    if (!norm || loading) return;
     setLoading(true);
+    setError(null);
     try {
-      // Salva l'email per riconoscerla post-redirect a verifyRequest
-      sessionStorage.setItem(STORAGE_KEY, targetEmail);
-      await signIn("nodemailer", {
-        email: targetEmail,
+      const res = await signIn("nodemailer", {
+        email: norm,
+        redirect: false,
         callbackUrl: "/dashboard",
       });
+      if (res?.error) {
+        setError(friendlyError(res.error));
+      } else {
+        setNormEmail(norm);
+        setStage("code");
+        setCooldown(RESEND_COOLDOWN_SEC);
+      }
+    } catch {
+      setError("Non sono riuscito a inviare il codice. Riprova.");
     } finally {
-      // Se Auth.js fa il redirect (caso normale) questo finally non viene
-      // eseguito perché il document cambia URL. È un cleanup per il caso di
-      // errore inline.
       setLoading(false);
     }
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  function verifyCode(e: React.FormEvent) {
     e.preventDefault();
-    await submit(email);
-  }
-
-  async function onResend() {
-    if (!storedEmail) return;
-    setCooldown(RESEND_COOLDOWN_SEC);
-    setLoading(true);
-    try {
-      await signIn("nodemailer", {
-        email: storedEmail,
-        callbackUrl: "/dashboard",
-      });
-    } finally {
-      setLoading(false);
+    const clean = code.replace(/\D/g, "");
+    if (clean.length !== 6) {
+      setError("Inserisci le 6 cifre del codice.");
+      return;
     }
+    setLoading(true);
+    // Navigazione a pagina intera: la callback verifica il codice e imposta il
+    // cookie di sessione nel contenitore corrente (quindi anche nella PWA).
+    const qs = new URLSearchParams({
+      token: clean,
+      email: normEmail,
+      callbackUrl: "/dashboard",
+    });
+    window.location.href = `/api/auth/callback/nodemailer?${qs.toString()}`;
   }
 
   return (
@@ -96,22 +110,34 @@ export function LoginClient() {
       <div className="panel w-full max-w-md p-8">
         <Logo />
 
-        {sent ? (
-          <SentState
-            email={storedEmail}
-            onResend={onResend}
-            cooldown={cooldown}
+        {stage === "email" ? (
+          <EmailStage
+            email={email}
+            setEmail={setEmail}
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendCode(email);
+            }}
             loading={loading}
+            error={error}
             t={t}
           />
         ) : (
-          <FormState
-            email={email}
-            setEmail={setEmail}
-            onSubmit={onSubmit}
+          <CodeStage
+            email={normEmail}
+            code={code}
+            setCode={setCode}
+            onSubmit={verifyCode}
+            onBack={() => {
+              setStage("email");
+              setCode("");
+              setError(null);
+            }}
+            onResend={() => sendCode(normEmail)}
+            cooldown={cooldown}
             loading={loading}
-            errorCode={errorCode}
-            t={t}
+            error={error}
+            inputRef={codeInputRef}
           />
         )}
       </div>
@@ -135,36 +161,36 @@ function Logo() {
   );
 }
 
-function FormState({
+function EmailStage({
   email,
   setEmail,
   onSubmit,
   loading,
-  errorCode,
+  error,
   t,
 }: {
   email: string;
   setEmail: (s: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   loading: boolean;
-  errorCode: string | null;
+  error: string | null;
   t: ReturnType<typeof useTranslations<"auth">>;
 }) {
-  const errorMsg = errorCode ? friendlyError(errorCode) : null;
-
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <h1 className="text-xl font-semibold tracking-tight">
         {t("signinTitle")}
       </h1>
-      <p className="text-xs text-[var(--sub)]">{t("signinSubtitle")}</p>
+      <p className="text-xs text-[var(--sub)]">
+        Inserisci la tua email: ti mandiamo un codice a 6 cifre da digitare qui.
+      </p>
 
-      {errorMsg && (
+      {error && (
         <div
           role="alert"
           className="text-xs bg-[rgba(223,27,65,0.06)] border border-[rgba(223,27,65,0.2)] text-[var(--err)] rounded-md p-2.5"
         >
-          {errorMsg}
+          {error}
         </div>
       )}
 
@@ -188,94 +214,105 @@ function FormState({
         className="btn w-full !h-10 justify-center"
         disabled={loading || !email}
       >
-        {loading ? "Invio in corso…" : t("signin")}
+        {loading ? "Invio in corso…" : "Inviami il codice"}
       </button>
 
       <p className="text-[11px] text-[var(--sub)] text-center pt-2">
-        Niente password. Ti mandiamo un link via email che vale 24 ore.
+        Niente password. Il codice vale 15 minuti.
       </p>
     </form>
   );
 }
 
-function SentState({
+function CodeStage({
   email,
+  code,
+  setCode,
+  onSubmit,
+  onBack,
   onResend,
   cooldown,
   loading,
-  t,
+  error,
+  inputRef,
 }: {
-  email: string | null;
+  email: string;
+  code: string;
+  setCode: (s: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onBack: () => void;
   onResend: () => void;
   cooldown: number;
   loading: boolean;
-  t: ReturnType<typeof useTranslations<"auth">>;
+  error: string | null;
+  inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="bg-[var(--bg)] border border-[var(--line)] rounded-lg p-5 text-sm">
-        <div className="text-2xl mb-2">📬</div>
-        <div className="font-semibold mb-1">{t("magicLinkSent")}</div>
-        {email ? (
-          <>
-            <div className="text-[var(--sub)] mb-3">
-              Ti abbiamo mandato un link a:
-            </div>
-            <div className="num-mono text-[var(--ink)] bg-white border border-[var(--line)] rounded-md px-3 py-2 text-[13px] break-all">
-              {email}
-            </div>
-          </>
-        ) : (
-          <div className="text-[var(--sub)]">
-            {t("magicLinkInstructions")}
-          </div>
-        )}
-        <div className="text-[11px] text-[var(--sub)] mt-3 leading-relaxed">
-          Apri la casella e clicca il pulsante <strong>Accedi</strong>. Il link
-          è valido per 24 ore.
-        </div>
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">
+          Inserisci il codice
+        </h1>
+        <p className="text-xs text-[var(--sub)] mt-1">
+          Abbiamo inviato un codice a 6 cifre a{" "}
+          <strong className="text-[var(--ink)]">{email}</strong>. Controlla anche
+          Spam/Promozioni.
+        </p>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="text-xs bg-[rgba(223,27,65,0.06)] border border-[rgba(223,27,65,0.2)] text-[var(--err)] rounded-md p-2.5"
+        >
+          {error}
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="\d*"
+        maxLength={6}
+        placeholder="••••••"
+        className="input w-full !h-14 text-center num-mono tracking-[0.5em] text-2xl"
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+        disabled={loading}
+      />
+
+      <button
+        type="submit"
+        className="btn w-full !h-10 justify-center"
+        disabled={loading || code.replace(/\D/g, "").length !== 6}
+      >
+        {loading ? "Verifica…" : "Entra"}
+      </button>
+
       <div className="flex items-center justify-between gap-2">
-        <a
-          href="/login"
+        <button
+          type="button"
+          onClick={onBack}
           className="text-xs text-[var(--sub)] hover:text-[var(--ink)] underline"
         >
           Cambia email
-        </a>
-        {email && (
-          <button
-            type="button"
-            onClick={onResend}
-            disabled={cooldown > 0 || loading}
-            className="btn-ghost !h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading
-              ? "Invio…"
-              : cooldown > 0
-                ? `Rinvia tra ${cooldown}s`
-                : "Non l'hai ricevuto? Rinvia"}
-          </button>
-        )}
+        </button>
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={cooldown > 0 || loading}
+          className="btn-ghost !h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {cooldown > 0 ? `Rinvia tra ${cooldown}s` : "Rinvia codice"}
+        </button>
       </div>
 
-      <details className="text-[11px] text-[var(--sub)] mt-2">
-        <summary className="cursor-pointer hover:text-[var(--ink)]">
-          Non vedi l&apos;email?
-        </summary>
-        <ul className="mt-2 ml-4 space-y-1 list-disc">
-          <li>Controlla la cartella Spam o Promozioni</li>
-          <li>Aspetta qualche secondo, a volte ci mette un po&apos;</li>
-          {email && (
-            <li>
-              Verifica che <strong>{email}</strong> sia corretta — usa &quot;Cambia
-              email&quot; se hai sbagliato
-            </li>
-          )}
-          <li>Il link precedente potrebbe essere ancora valido</li>
-        </ul>
-      </details>
-    </div>
+      <p className="text-[11px] text-[var(--sub)] text-center">
+        Il codice vale 15 minuti e si usa una sola volta.
+      </p>
+    </form>
   );
 }
 
@@ -286,7 +323,7 @@ function SentState({
 function friendlyError(code: string): string {
   switch (code) {
     case "Verification":
-      return "Il link è scaduto o è già stato usato. Richiedi un nuovo link qui sotto.";
+      return "Codice errato o scaduto. Richiedine uno nuovo qui sotto.";
     case "EmailSignin":
       return "Non sono riuscito a inviare l'email. Controlla l'indirizzo e riprova.";
     case "AccessDenied":

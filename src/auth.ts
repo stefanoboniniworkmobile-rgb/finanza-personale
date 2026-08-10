@@ -29,6 +29,17 @@ import { buildMagicLinkEmail } from "@/lib/email-templates";
  */
 const useResend = !!process.env.RESEND_API_KEY;
 
+/**
+ * Codice OTP a 6 cifre, crittograficamente casuale. Diventa il "token" di
+ * Auth.js: l'email lo mostra in evidenza e l'utente lo digita nell'app, così
+ * l'accesso avviene nello stesso contenitore della PWA installata (su iOS il
+ * magic link aprirebbe invece Safari, lasciando l'app scollegata).
+ */
+function generateOtpCode(): string {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
+  return n.toString().padStart(6, "0");
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   // Sessione lunga: 90 giorni. Non devi reinserire la mail di continuo.
@@ -37,6 +48,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Nodemailer({
       from: process.env.EMAIL_FROM || "Finanza Personale <noreply@localhost>",
+      // OTP: il token è un codice a 6 cifre valido 15 minuti (vale anche nel link).
+      maxAge: 15 * 60,
+      generateVerificationToken: generateOtpCode,
       // Auth.js v5 valida `server` come SMTP config al boot. In dev (senza
       // Resend) passiamo un fittizio "localhost:25" — NON viene mai usato
       // perché `sendVerificationRequest` sotto stampa il link in console e
@@ -54,7 +68,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             port: 25,
             auth: { user: "_", pass: "_" },
           },
-      sendVerificationRequest: async ({ identifier, url, provider }) => {
+      sendVerificationRequest: async ({ identifier, url, provider, token }) => {
         // Estrae l'host dall'URL del callback (es. "finanza-personale.app").
         // Usato nel footer dell'email per orientare l'utente.
         let host: string | undefined;
@@ -68,17 +82,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           url,
           to: identifier,
           host,
-          expiryHours: 24,
+          code: token,
+          expiryMinutes: 15,
         });
 
         if (!useResend) {
-          // Dev: stampa il link in console al posto di inviare la mail.
-          // Niente HTML rendering, copi il link e basta.
-          console.log("\n========== MAGIC LINK ==========");
+          // Dev: stampa codice e link in console al posto di inviare la mail.
+          console.log("\n========== CODICE ACCESSO ==========");
           console.log(`Per:     ${identifier}`);
-          console.log(`Oggetto: ${subject}`);
+          console.log(`Codice:  ${token}`);
           console.log(`Link:    ${url}`);
-          console.log("================================\n");
+          console.log("====================================\n");
           return;
         }
 
