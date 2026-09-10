@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/refresh-prices",
       "schedule": "30 18 * * 1-5"
+    },
+    {
+      "path": "/api/keepalive",
+      "schedule": "23 4 * * *"
     }
   ]
 }
