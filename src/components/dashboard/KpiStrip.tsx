@@ -137,7 +137,7 @@ function PrimaryCard({
           <Icon size={16} strokeWidth={2} />
         </span>
       </div>
-      <div className="text-[26px] leading-none font-semibold num tracking-tight text-ink mt-3">
+      <div className="text-[21px] sm:text-[26px] leading-none font-semibold num tracking-tight text-ink mt-3">
         {valueNode ?? value}
       </div>
       <div className="mt-2.5 min-h-[22px]">{children}</div>

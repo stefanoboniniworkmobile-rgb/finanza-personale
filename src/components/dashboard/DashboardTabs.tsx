@@ -42,7 +42,7 @@ export function DashboardTabs({
       <div
         role="tablist"
         aria-label="Sezioni dashboard"
-        className="flex gap-1 border-b border-[var(--line)] mb-4"
+        className="flex gap-1 border-b border-[var(--line)] mb-4 overflow-x-auto no-scrollbar"
       >
         {TABS.map((t) => {
           const on = active === t.key;
@@ -54,7 +54,7 @@ export function DashboardTabs({
               type="button"
               onClick={() => setActive(t.key)}
               className={
-                "px-3.5 py-2 text-sm font-medium -mb-px border-b-2 transition " +
+                "px-3.5 py-2 text-sm font-medium -mb-px border-b-2 transition shrink-0 whitespace-nowrap " +
                 (on
                   ? "border-[var(--ink)] text-[var(--ink)]"
                   : "border-transparent text-[var(--sub)] hover:text-[var(--ink)]")

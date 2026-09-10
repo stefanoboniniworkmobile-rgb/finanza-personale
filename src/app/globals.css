@@ -468,3 +468,12 @@ table.budget-grid tfoot td.is-actual-cell {
     width: 100%;
   }
 }
+
+/* Scroll orizzontale senza barra visibile (es. tab su mobile) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
