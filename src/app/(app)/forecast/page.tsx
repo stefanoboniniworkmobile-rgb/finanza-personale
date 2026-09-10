@@ -63,7 +63,52 @@ export default async function ForecastListPage() {
           .
         </div>
       ) : (
-        <div className="panel overflow-x-auto">
+        <>
+        {/* Mobile: scenari a schede */}
+        <div className="md:hidden space-y-2.5">
+          {forecasts.map((f) => {
+            const actuals = parseActualMonths(f.actualMonths);
+            return (
+              <div key={f.id} className="panel p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/forecast/${f.id}`}
+                    className="min-w-0 flex-1 hover:text-brand-500 transition"
+                  >
+                    <div className="font-semibold text-[15px] truncate">
+                      {f.name}
+                    </div>
+                    {f.notes && (
+                      <div className="text-[11px] text-sub truncate">
+                        {f.notes}
+                      </div>
+                    )}
+                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="pill bg-line2 text-ink2 num-mono">
+                      {f.year}
+                    </span>
+                    <ForecastListActions id={f.id} name={f.name} />
+                  </div>
+                </div>
+                <Link
+                  href={`/forecast/${f.id}`}
+                  className="mt-2.5 flex items-center gap-2 text-[11px] text-sub"
+                >
+                  <span>Consuntivo {actuals.length}/12</span>
+                  <span>·</span>
+                  <span>{f._count.budgets} override</span>
+                  <span className="ml-auto num-mono">
+                    {fmtDateFull(f.updatedAt)}
+                  </span>
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: tabella */}
+        <div className="panel overflow-x-auto hidden md:block">
           <table className="dense">
             <thead>
               <tr>
@@ -127,6 +172,7 @@ export default async function ForecastListPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

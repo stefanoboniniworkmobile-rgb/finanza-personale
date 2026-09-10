@@ -8,6 +8,7 @@ import {
   ForecastGridClient,
   type ForecastGridRow,
 } from "@/components/forecast/ForecastGridClient";
+import { ForecastMobile } from "@/components/forecast/ForecastMobile";
 import { ForecastSettingsButton } from "@/components/forecast/ForecastSettingsButton";
 import { parseActualMonths } from "@/lib/forecast";
 
@@ -197,7 +198,7 @@ export default async function ForecastDetailPage(props: {
           Pulisci filtri
         </a>
         <div className="flex-1" />
-        <div className="text-xs text-sub ml-3">
+        <div className="hidden md:block text-xs text-sub ml-3">
           <span className="inline-block w-3 h-3 rounded-sm bg-line2 mr-1 align-middle" />
           Consuntivo (read-only) ·{" "}
           <span className="inline-block w-3 h-3 rounded-sm bg-white border border-line ml-1 mr-1 align-middle" />
@@ -205,7 +206,16 @@ export default async function ForecastDetailPage(props: {
         </div>
       </form>
 
-      <ForecastGridClient
+      <div className="hidden md:block">
+        <ForecastGridClient
+          forecastId={forecast.id}
+          year={year}
+          monthLabels={MONTHS_LABEL}
+          rows={rows}
+          totals={totals}
+        />
+      </div>
+      <ForecastMobile
         forecastId={forecast.id}
         year={year}
         monthLabels={MONTHS_LABEL}
