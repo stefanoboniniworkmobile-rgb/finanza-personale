@@ -43,12 +43,20 @@ export function MobileTabBar() {
               key={it.href}
               href={it.href}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center justify-center gap-0.5 transition-colors ${
-                active ? "text-brand-600" : "text-sub"
-              }`}
+              className="flex flex-col items-center justify-center gap-1 active:opacity-60 transition-opacity"
             >
-              <Icon size={21} strokeWidth={active ? 2.25 : 1.75} />
-              <span className="text-[10px] font-medium leading-none">
+              <span
+                className={`grid place-items-center w-10 h-6 rounded-full transition-colors ${
+                  active ? "bg-brand-50 text-brand-600" : "text-sub"
+                }`}
+              >
+                <Icon size={20} strokeWidth={active ? 2.25 : 1.75} />
+              </span>
+              <span
+                className={`text-[10px] font-medium leading-none ${
+                  active ? "text-brand-600" : "text-sub"
+                }`}
+              >
                 {it.label}
               </span>
             </Link>
@@ -57,10 +65,12 @@ export function MobileTabBar() {
         <button
           type="button"
           onClick={() => window.dispatchEvent(new Event("fp:open-nav"))}
-          className="flex flex-col items-center justify-center gap-0.5 text-sub"
+          className="flex flex-col items-center justify-center gap-1 text-sub active:opacity-60 transition-opacity"
           aria-label="Altro"
         >
-          <Menu size={21} strokeWidth={1.75} />
+          <span className="grid place-items-center w-10 h-6 rounded-full">
+            <Menu size={20} strokeWidth={1.75} />
+          </span>
           <span className="text-[10px] font-medium leading-none">Altro</span>
         </button>
       </div>
