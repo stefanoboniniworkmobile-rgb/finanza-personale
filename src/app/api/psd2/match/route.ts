@@ -273,22 +273,19 @@ export async function POST(req: NextRequest) {
 
         out.push({ jobId: job.id, connId, bankAccountName });
 
-        // Dedup: rimuovi eventuali connessioni MORTE (scadute/revocate, o con
-        // validUntil passato) dello stesso conto+provider rimaste da un rinnovo
-        // precedente. Enable Banking può assegnare un nuovo `uid` al conto a ogni
+        // Dedup connessioni: un conto deve avere UNA sola connessione PSD2 per
+        // provider. Enable Banking può assegnare un nuovo `uid` al conto a ogni
         // consenso → l'upsert su (provider, providerAccountId) crea una riga nuova
-        // e lascerebbe viva quella vecchia (doppione in UI). Non tocchiamo mai una
-        // connessione ancora attiva e valida.
+        // e lascerebbe viva quella vecchia (doppione in UI). Appena ne stabiliamo
+        // una nuova per questo conto, rimuoviamo QUALSIASI altra connessione dello
+        // stesso conto+provider (quella appena creata/aggiornata è l'unica valida).
+        // Le transazioni restano (bankConnectionId SetNull); i SyncJob vecchi
+        // cascadano. Scope per bankAccountId → non tocca gli altri conti.
         await tx.bankConnection.deleteMany({
           where: {
             bankAccountId,
             provider: "enable_banking",
             id: { not: connId },
-            OR: [
-              { status: "expired" },
-              { status: "revoked" },
-              { validUntil: { lt: new Date() } },
-            ],
           },
         });
       }
