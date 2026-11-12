@@ -31,9 +31,20 @@ async function requireUserId(): Promise<string> {
  * In prod: NEXT_PUBLIC_APP_URL (es. https://finanza.tuodominio.it).
  */
 function getCallbackUrl(): string {
+  // Priorità: URL pubblico esplicito → URL canonico di Auth.js → localhost (solo dev).
+  // In produzione senza configurazione falliamo con un messaggio chiaro invece di
+  // rimandare silenziosamente a localhost (il consenso tornerebbe su una pagina
+  // irraggiungibile — bug visto in prod quando NEXT_PUBLIC_APP_URL non era settata).
   const base =
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://localhost:3000";
-  return `${base}/api/psd2/callback`;
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.AUTH_URL ??
+    (process.env.NODE_ENV !== "production" ? "https://localhost:3000" : null);
+  if (!base) {
+    throw new Error(
+      "URL pubblico non configurato: imposta NEXT_PUBLIC_APP_URL (es. https://finanza-personale-mu.vercel.app) nelle variabili d'ambiente di produzione.",
+    );
+  }
+  return `${base.replace(/\/+$/, "")}/api/psd2/callback`;
 }
 
 /**
