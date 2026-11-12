@@ -405,19 +405,30 @@ export async function syncBankConnection(
   };
   const validMapped: MappedTx[] = [];
   let mapFailures = 0;
+  // Conteggio occorrenze della stessa firma nello stesso batch. Banche come
+  // Mediolanum non danno ID/orario: due movimenti REALMENTE identici (giorno +
+  // importo + causale + controparte) producono la stessa firma e, senza questo,
+  // il secondo verrebbe scartato (→ "mancante"). Teniamo un contatore: la 1ª
+  // occorrenza mantiene la firma base (retro-compatibile con le tx già salvate),
+  // la 2ª/3ª ricevono un suffisso #1/#2. Così ne teniamo quante ne arrivano, e
+  // il conteggio è stabile tra sync successivi (le tx booked non spariscono).
+  const refCounts = new Map<string, number>();
   for (const ebTx of allTx) {
     const m = mapEbTransaction(ebTx);
     if (!m) {
       mapFailures++;
       continue;
     }
+    const seen = refCounts.get(m.providerEntryRef) ?? 0;
+    refCounts.set(m.providerEntryRef, seen + 1);
+    const ref = seen === 0 ? m.providerEntryRef : `${m.providerEntryRef}#${seen}`;
     validMapped.push({
-      id: m.providerEntryRef, // l'id UI coincide con providerEntryRef
+      id: ref, // l'id UI coincide con providerEntryRef
       date: m.date,
       description: m.description,
       amount: m.amount,
       type: m.type,
-      providerEntryRef: m.providerEntryRef,
+      providerEntryRef: ref,
     });
   }
 
