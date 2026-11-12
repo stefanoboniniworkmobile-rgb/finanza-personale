@@ -7,6 +7,7 @@ import {
   previewSyncAction,
   deleteBankConnectionAction,
   verifyBankBalanceAction,
+  initiateBankConnectionFlow,
   type BalanceCheck,
 } from "@/app/(app)/bank-connections-actions";
 import type { PreviewTx } from "@/lib/psd2/sync";
@@ -48,7 +49,7 @@ export function BancheClient({
   initialMessage?: { kind: "ok" | "err"; msg: string } | null;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<Record<string, "preview" | "commit" | "delete" | "balance" | null>>({});
+  const [busy, setBusy] = useState<Record<string, "preview" | "commit" | "delete" | "balance" | "renew" | null>>({});
   const [balanceCheck, setBalanceCheck] = useState<{
     aspspName: string;
     data: BalanceCheck;
@@ -240,6 +241,34 @@ export function BancheClient({
     }
   }
 
+  /**
+   * Rinnova una connessione (dopo scadenza o in scadenza): rilancia il consent
+   * flow Enable Banking per la stessa banca e lo stesso conto. Al ritorno, il
+   * match fa upsert su (provider, providerAccountId) → aggiorna la connessione
+   * esistente con nuova sessione e validUntil (nessun doppione).
+   * Nota PSD2: serve comunque l'autenticazione forte (SCA) in banca — non esiste
+   * rinnovo silenzioso in background.
+   */
+  async function handleRenew(r: Row) {
+    setBusy((b) => ({ ...b, [r.id]: "renew" }));
+    setToast(null);
+    const res = await initiateBankConnectionFlow({
+      bankAccountId: r.bankAccountId,
+      aspspName: r.aspspName,
+      aspspCountry: r.aspspCountry,
+    });
+    if (res.ok && res.data?.url) {
+      // Redirect alla pagina di consenso della banca.
+      window.location.href = res.data.url;
+      return;
+    }
+    setToast({
+      kind: "err",
+      msg: res.ok ? "Risposta senza URL di consenso" : res.error,
+    });
+    setBusy((b) => ({ ...b, [r.id]: null }));
+  }
+
   async function handleDelete(id: string, name: string, txCount: number) {
     const txMsg =
       txCount > 0
@@ -392,6 +421,17 @@ export function BancheClient({
                             ? "Importo..."
                             : "Sincronizza"}
                       </button>
+                      {(expired || daysToExpiry <= 10) && (
+                        <button
+                          type="button"
+                          className={expired ? "btn text-xs" : "btn-ghost text-xs"}
+                          onClick={() => handleRenew(r)}
+                          disabled={ongoing === "renew"}
+                          title="Rifai il consenso in banca per rinnovare la connessione (serve autenticazione SCA)"
+                        >
+                          {ongoing === "renew" ? "Reindirizzo..." : "Rinnova"}
+                        </button>
+                      )}
                       {lastSync && (
                         <span className="text-[10px] text-sub">
                           Ultimo: {lastSync.toLocaleDateString("it-IT", {
