@@ -272,6 +272,25 @@ export async function POST(req: NextRequest) {
         });
 
         out.push({ jobId: job.id, connId, bankAccountName });
+
+        // Dedup: rimuovi eventuali connessioni MORTE (scadute/revocate, o con
+        // validUntil passato) dello stesso conto+provider rimaste da un rinnovo
+        // precedente. Enable Banking può assegnare un nuovo `uid` al conto a ogni
+        // consenso → l'upsert su (provider, providerAccountId) crea una riga nuova
+        // e lascerebbe viva quella vecchia (doppione in UI). Non tocchiamo mai una
+        // connessione ancora attiva e valida.
+        await tx.bankConnection.deleteMany({
+          where: {
+            bankAccountId,
+            provider: "enable_banking",
+            id: { not: connId },
+            OR: [
+              { status: "expired" },
+              { status: "revoked" },
+              { validUntil: { lt: new Date() } },
+            ],
+          },
+        });
       }
       // Cleanup: la pending session è stata "consumata", non serve più.
       // Se l'utente rifa il flow EB genera un nuovo session_id, quindi anche
