@@ -469,10 +469,15 @@ export async function syncBankConnection(
     let existingTxId: string | null = null;
     let needsHealing = false;
 
-    // Step 1: dedup primario per providerEntryRef
+    // Step 1: dedup primario per providerEntryRef.
+    // Scope = BANK ACCOUNT (non la connessione): providerEntryRef è univoco per
+    // (ASPSP, account) e l'account è stabile tra i rinnovi, mentre la connessione
+    // cambia (Enable Banking assegna un nuovo uid/sessione). Se cercassimo per
+    // bankConnectionId, dopo un rinnovo non troveremmo le tx importate con la
+    // connessione precedente → le re-importeremmo tutte come nuove (duplicati).
     const existingByRef = await prisma.transaction.findFirst({
       where: {
-        bankConnectionId: conn.id,
+        bankAccountId: conn.bankAccountId,
         providerEntryRef: mapped.providerEntryRef,
       },
       select: { id: true },
@@ -497,7 +502,11 @@ export async function syncBankConnection(
       healingTo.setUTCDate(healingTo.getUTCDate() + 5);
       const candidates = await prisma.transaction.findMany({
         where: {
-          bankConnectionId: conn.id,
+          // Stesso conto (stabile tra rinnovi), solo tx di origine PSD2
+          // (bankConnectionId non null) per non "guarire" per errore tx manuali
+          // — quelle sono gestite dal fuzzy-match dedicato (bankConnectionId null).
+          bankAccountId: conn.bankAccountId,
+          bankConnectionId: { not: null },
           providerEntryRef: null,
           date: { gte: healingFrom, lte: healingTo },
           amount: mapped.amount,
@@ -605,6 +614,10 @@ export async function syncBankConnection(
           description: mapped.description,
           amount: mapped.amount,
           type: mapped.type,
+          // Ri-aggancia la tx alla connessione corrente: se era stata importata
+          // con una connessione precedente (poi scaduta/rimossa al rinnovo), qui
+          // ne ripristiniamo la provenienza invece di lasciarla orfana.
+          bankConnectionId: conn.id,
           // Healing: popola providerEntryRef sulla tx legacy
           ...(needsHealing ? { providerEntryRef: mapped.providerEntryRef } : {}),
           // categoryId NON sovrascritta: rispettiamo l'eventuale categorizzazione manuale
