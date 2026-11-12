@@ -394,26 +394,6 @@ export async function syncBankConnection(
     continuationKey = res.continuation_key ?? undefined;
   } while (continuationKey);
 
-  // DEBUG TEMPORANEO (rimuovere dopo diagnosi Mediolanum): mostra i campi grezzi
-  // delle prime transazioni per capire quali identificativi la banca espone
-  // davvero via Enable Banking (il tipo mappa solo entry_reference/transaction_id,
-  // ma il payload ha "molti altri campi opzionali").
-  for (const t of allTx.slice(0, 8)) {
-    const raw = t as Record<string, unknown>;
-    console.log(
-      "[PSD2-DEBUG2]",
-      JSON.stringify({
-        bal: raw.balance_after_transaction ?? null,
-        status: raw.status ?? null,
-        booking: raw.booking_date ?? null,
-        value: raw.value_date ?? null,
-        txdate: raw.transaction_date ?? null,
-        amount: (raw.transaction_amount as { amount?: string })?.amount ?? null,
-        btc: raw.bank_transaction_code ?? null,
-      }),
-    );
-  }
-
   // Pre-pass: mappa tutte le tx + calcola finestra date
   type MappedTx = {
     id: string;
