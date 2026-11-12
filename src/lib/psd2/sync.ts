@@ -398,18 +398,19 @@ export async function syncBankConnection(
   // delle prime transazioni per capire quali identificativi la banca espone
   // davvero via Enable Banking (il tipo mappa solo entry_reference/transaction_id,
   // ma il payload ha "molti altri campi opzionali").
-  for (const t of allTx.slice(0, 6)) {
+  for (const t of allTx.slice(0, 8)) {
     const raw = t as Record<string, unknown>;
-    const idish = Object.fromEntries(
-      Object.entries(raw).filter(([k]) =>
-        /id|ref|reference|e2e|end_to_end|mandate|check|proprietary|number/i.test(k),
-      ),
-    );
     console.log(
-      "[PSD2-DEBUG] allKeys=",
-      Object.keys(raw).join(","),
-      "| idFields=",
-      JSON.stringify(idish),
+      "[PSD2-DEBUG2]",
+      JSON.stringify({
+        bal: raw.balance_after_transaction ?? null,
+        status: raw.status ?? null,
+        booking: raw.booking_date ?? null,
+        value: raw.value_date ?? null,
+        txdate: raw.transaction_date ?? null,
+        amount: (raw.transaction_amount as { amount?: string })?.amount ?? null,
+        btc: raw.bank_transaction_code ?? null,
+      }),
     );
   }
 
